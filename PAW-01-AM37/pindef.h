@@ -18,14 +18,14 @@
 
 #define DEXT 13
 
-#define AIN0 0
-#define AIN1 1
-#define AIN2 2
-#define AIN3 3
+#define CVIN0 0
+#define CVIN1 1
+#define CVIN2 2
+#define CVIN3 3
 
-#define AMUX0 4
-#define AMUX1 5
-#define AMUX2 6
-#define AMUX3 7
+#define CVMUXIN0 4
+#define CVMUXIN1 5
+#define CVMUXIN2 6
+#define CVMUXIN3 7
 
 #endif

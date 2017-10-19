@@ -8,10 +8,6 @@
 #error("Height incorrect, please fix Adafruit_SSD1306.h!");
 #endif
 
-#define MOUSE_LEFT 0
-#define MOUSE_MIDDLE 1
-#define MOUSE_RIGHT 2
-
 void shortPullSwitch(int pin)
 {
   digitalWrite(pin, LOW);
@@ -26,28 +22,6 @@ void longPullSwitch(int pin)
   delay(4000);
   digitalWrite(pin, HIGH);
   delay(200);
-}
-
-void MousePush(int button)
-{
-    Serial.print("MP,");
-    Serial.println(button);
-}
-
-void MouseRelease(int button)
-{
-    Serial.print("MR,");
-    Serial.println(button);
-}
-
-void MouseMove(int x, int y, int wheel)
-{
-    Serial.print("MM,");
-    Serial.print(x);
-    Serial.print(",");
-    Serial.print(y);
-    Serial.print(",");
-    Serial.println(wheel);
 }
 
 Adafruit_SSD1306 display(OLED_DC, OLED_RESET, OLED_CS);

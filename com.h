@@ -1,24 +1,22 @@
-#ifndef UTILS_H
-#define UTILS_H
-
 #define MOUSE_LEFT 0
 #define MOUSE_MIDDLE 1
 #define MOUSE_RIGHT 2
 
-void shortPullSwitch(int pin)
-{
-  digitalWrite(pin, LOW);
-  delay(200);
-  digitalWrite(pin, HIGH);
-  delay(200);
-}
+const byte numChars = 32;
+char receivedChars[numChars];
+char* ReadCOM() {
+    char endMarker = '\n';
+    int read_bytes = 0;
+    Serial.setTimeout(50);
+    if(Serial.available()){
+        read_bytes = Serial.readBytesUntil(endMarker, receivedChars, numChars - 1);
+        if(read_bytes != 0){
+            receivedChars[read_bytes] = 0;
+            return receivedChars;
+        }
+    }
 
-void longPullSwitch(int pin)
-{
-  digitalWrite(pin, LOW);
-  delay(4000);
-  digitalWrite(pin, HIGH);
-  delay(200);
+    return NULL;
 }
 
 void MousePush(int button)
@@ -42,10 +40,3 @@ void MouseMove(int x, int y, int wheel)
     Serial.print(",");
     Serial.println(wheel);
 }
-
-float sample()
-{
-  return (analogRead(0) - 512) / 1024.0f;
-}
-
-#endif

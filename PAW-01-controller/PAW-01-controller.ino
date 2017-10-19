@@ -1,7 +1,8 @@
+#include "Arduino.h"
 #include "pindef.h"
-#include "debounced_button.h"
+#include "../debounced_button.h"
 #include "utils.h"
-#include "readline.h"
+#include "../com.h"
 
 int joy_x = 0, joy_y = 0;
 int joy_xzero = 512, joy_yzero = 512;
