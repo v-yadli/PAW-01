@@ -3,7 +3,8 @@
 #include "utils.h"
 #include "readline.h"
 
-// ============== End of routines
+DEBOUNCED_BUTTON KEYS_1[37];
+DEBOUNCED_BUTTON KEYS_2[37];
 
 void DATA_IN()
 {
@@ -17,6 +18,14 @@ void DATA_IN()
   pinMode(DATA7, INPUT_PULLUP);
 }
 
+void SET_ADDR(byte ADDR)
+{
+  digitalWrite(ADDR0, ADDR & 0x1);
+  digitalWrite(ADDR1, ADDR & 0x2);
+  digitalWrite(ADDR2, ADDR & 0x4);
+  digitalWrite(ADDR3, ADDR & 0x8);
+}
+
 void setup()   {                
   Serial.begin(250000);
 
@@ -24,7 +33,6 @@ void setup()   {
   pinMode(ADDR1, OUTPUT);
   pinMode(ADDR2, OUTPUT);
   pinMode(ADDR3, OUTPUT);
-  pinMode(ADDR4, OUTPUT);
 
   DATA_IN();
 }
