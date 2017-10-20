@@ -3,8 +3,7 @@
 #include "debounced_button.h"
 #include "com.h"
 
-#define GROUP_CNT 10
-#define KEYS_IN_GROUP 4
+#define GROUP_CNT 5
 #define CV_OUT_CNT 2
 #define CV_IN_CNT 4
 #define CVMUX_IN_CNT 16
@@ -16,7 +15,7 @@
 #define DAC0832ADDRXFER 15
 
 struct KEY{
-  int Velocity;
+  unsigned long TriggerTime;
   bool On;
 };
 
@@ -73,7 +72,7 @@ void SET_ADDR(byte ADDR)
   // Serial.println(ADDR);
   // delay(1000);
 
-  delayMicroseconds(300);
+  delayMicroseconds(100);
   // delay(1000);
 }
 
@@ -93,7 +92,7 @@ void setup()   {
     KEYS_2[i].current_val=1;
     KEYS_2[i].cnt=0;
     KEYS_RECORDS[i].On=false;
-    KEYS_RECORDS[i].Velocity=0;
+    KEYS_RECORDS[i].TriggerTime=0;
   }
 
   for(int i=0;i<CV_OUT_CNT;++i){
@@ -109,45 +108,84 @@ void setup()   {
   }
 }
 
-void ReadKey(byte offset, byte pin1, byte pin2)
-{
-  bool k1, k2;
-  bool kon = KEYS_RECORDS[offset].On;
-  k1 = DEBOUNCE_READ(pin1, KEYS_1[offset]);
-  k2 = DEBOUNCE_READ(pin2, KEYS_2[offset]);
-  if(kon){
-
-  }else{
-    if(k1){
-      Serial.print("Key1 ");
-      Serial.print(offset);
-      Serial.print(" triggered, state = ");
-      Serial.println(KEYS_1[offset].current_val);
-    }
-
-    if(k2){
-      Serial.print("Key2 ");
-      Serial.print(offset);
-      Serial.print(" triggered, state = ");
-      Serial.println(KEYS_2[offset].current_val);
-    }
-  }
-}
-
 void ReadKeys()
 {
   DATA_IN();
   byte grp;
-  byte offset = 0;
+  byte offset1 = 0;
+  byte offset2 = 0;
+  byte updates[37];
+  memset(updates, 0, sizeof(updates));
   for(grp = 0; grp < GROUP_CNT; ++grp)
   {
-    SET_ADDR(grp);
-    ReadKey(offset++, DATA0, DATA1);
-    //  The last group has only one key
-    if (grp == GROUP_CNT - 1) break;
-    ReadKey(offset++, DATA2, DATA3);
-    ReadKey(offset++, DATA4, DATA5);
-    ReadKey(offset++, DATA6, DATA7);
+    SET_ADDR(grp * 2);
+    updates[offset1] |= DEBOUNCE_READ_ANALOG(7, KEYS_1[offset1]);
+    offset1++;
+    updates[offset1] |= DEBOUNCE_READ(DATA1, KEYS_1[offset1]);
+    offset1++;
+    updates[offset1] |= DEBOUNCE_READ(DATA2, KEYS_1[offset1]);
+    offset1++;
+    updates[offset1] |= DEBOUNCE_READ(DATA3, KEYS_1[offset1]);
+    offset1++;
+    updates[offset1] |= DEBOUNCE_READ(DATA4, KEYS_1[offset1]);
+    offset1++;
+    //  The last group has only 5 keys
+    if (grp < GROUP_CNT - 1){
+      updates[offset1] |= DEBOUNCE_READ(DATA5, KEYS_1[offset1]);
+      offset1++;
+      updates[offset1] |= DEBOUNCE_READ(DATA6, KEYS_1[offset1]);
+      offset1++;
+      updates[offset1] |= DEBOUNCE_READ(DATA7, KEYS_1[offset1]);
+      offset1++;
+    }
+    SET_ADDR(grp * 2 + 1);
+    updates[offset2] |= DEBOUNCE_READ_ANALOG(7, KEYS_2[offset2]);
+    offset2++;
+    updates[offset2] |= DEBOUNCE_READ(DATA1, KEYS_2[offset2]);
+    offset2++;
+    updates[offset2] |= DEBOUNCE_READ(DATA2, KEYS_2[offset2]);
+    offset2++;
+    updates[offset2] |= DEBOUNCE_READ(DATA3, KEYS_2[offset2]);
+    offset2++;
+    updates[offset2] |= DEBOUNCE_READ(DATA4, KEYS_2[offset2]);
+    offset2++;
+    //  The last group has only 5 keys
+    if (grp < GROUP_CNT - 1){
+      updates[offset2] |= DEBOUNCE_READ(DATA5, KEYS_2[offset2]);
+      offset2++;
+      updates[offset2] |= DEBOUNCE_READ(DATA6, KEYS_2[offset2]);
+      offset2++;
+      updates[offset2] |= DEBOUNCE_READ(DATA7, KEYS_2[offset2]);
+      offset2++;
+    }
+  }
+
+  for(int i=0;i<37;++i){
+    if(!updates[i]){
+      continue;
+    }
+    if(!KEYS_RECORDS[i].On){
+      if (!KEYS_1[i].current_val && KEYS_RECORDS[i].TriggerTime == 0){
+        KEYS_RECORDS[i].TriggerTime = micros();
+      }
+      if(!KEYS_2[i].current_val){
+        KEYS_RECORDS[i].On = true;
+        long time = micros() - KEYS_RECORDS[i].TriggerTime;
+        if(time < 0) {time += 2147483647;}
+        Serial.print("KON,");
+        Serial.print(i);
+        Serial.print(",");
+        Serial.print(time);
+        Serial.println();
+      }
+    }else{
+      if (KEYS_1[i].current_val || KEYS_2[i].current_val){
+        KEYS_RECORDS[i].On = false;
+        KEYS_RECORDS[i].TriggerTime = 0;
+        Serial.print("KOFF,");
+        Serial.println(i);
+      }
+    }
   }
 }
 
@@ -191,7 +229,8 @@ void ReadCVMuxIn()
 int val[80];
 int oldval[80];
 
-void loop() {
+void testkeys()
+{
   byte grp;
   byte offset = 0;
   for(grp = 0; grp < GROUP_CNT; ++grp)
@@ -216,14 +255,18 @@ void loop() {
     delay(1);
   }
   memcpy(oldval, val, sizeof(val));
-  //  read 37 keys
-  // ReadKeys();
-  // ReadCVIn();
-  // WriteCVOut();
-  // ReadCVMuxIn();
+}
 
-  // char* comlink = ReadCOM();
-  // if(comlink != NULL){
-  //   //TODO MOSI commands
-  // }
+void loop() {
+  // testkeys();
+  //  read 37 keys
+  ReadKeys();
+  ReadCVIn();
+  WriteCVOut();
+  ReadCVMuxIn();
+
+  char* comlink = ReadCOM();
+  if(comlink != NULL){
+    //TODO MOSI commands
+  }
 }
