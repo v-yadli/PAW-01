@@ -1,7 +1,7 @@
 #include "Arduino.h"
 #include "pindef.h"
-#include "../debounced_button.h"
-#include "../com.h"
+#include "debounced_button.h"
+#include "com.h"
 
 #define GROUP_CNT 10
 #define KEYS_IN_GROUP 4
@@ -29,34 +29,52 @@ int CVMUX_IN[CVMUX_IN_CNT];
 
 void DATA_IN()
 {
-  pinMode(DATA0, INPUT_PULLUP);
-  pinMode(DATA1, INPUT_PULLUP);
-  pinMode(DATA2, INPUT_PULLUP);
-  pinMode(DATA3, INPUT_PULLUP);
-  pinMode(DATA4, INPUT_PULLUP);
-  pinMode(DATA5, INPUT_PULLUP);
-  pinMode(DATA6, INPUT_PULLUP);
-  pinMode(DATA7, INPUT_PULLUP);
+  pinMode(DATA0, INPUT);
+  pinMode(DATA1, INPUT);
+  pinMode(DATA2, INPUT);
+  pinMode(DATA3, INPUT);
+  pinMode(DATA4, INPUT);
+  pinMode(DATA5, INPUT);
+  pinMode(DATA6, INPUT);
+  pinMode(DATA7, INPUT);
+  delayMicroseconds(300);
 }
 
 void DATA_OUT()
 {
-  pinMode(DATA0, INPUT_PULLUP);
-  pinMode(DATA1, INPUT_PULLUP);
-  pinMode(DATA2, INPUT_PULLUP);
-  pinMode(DATA3, INPUT_PULLUP);
-  pinMode(DATA4, INPUT_PULLUP);
-  pinMode(DATA5, INPUT_PULLUP);
-  pinMode(DATA6, INPUT_PULLUP);
-  pinMode(DATA7, INPUT_PULLUP);
+  pinMode(DATA0, OUTPUT);
+  pinMode(DATA1, OUTPUT);
+  pinMode(DATA2, OUTPUT);
+  pinMode(DATA3, OUTPUT);
+  pinMode(DATA4, OUTPUT);
+  pinMode(DATA5, OUTPUT);
+  pinMode(DATA6, OUTPUT);
+  pinMode(DATA7, OUTPUT);
+}
+
+void DATA_WRITE(byte value)
+{
+  digitalWrite(DATA0, (bool)(value & 0x1));
+  digitalWrite(DATA1, (bool)(value & 0x2));
+  digitalWrite(DATA2, (bool)(value & 0x4));
+  digitalWrite(DATA3, (bool)(value & 0x8));
+  digitalWrite(DATA4, (bool)(value & 0x10));
+  digitalWrite(DATA5, (bool)(value & 0x20));
+  digitalWrite(DATA6, (bool)(value & 0x40));
+  digitalWrite(DATA7, (bool)(value & 0x80));
 }
 
 void SET_ADDR(byte ADDR)
 {
-  digitalWrite(ADDR0, ADDR & 0x1);
-  digitalWrite(ADDR1, ADDR & 0x2);
-  digitalWrite(ADDR2, ADDR & 0x4);
-  digitalWrite(ADDR3, ADDR & 0x8);
+  digitalWrite(ADDR0, (bool)(ADDR & 0x1));
+  digitalWrite(ADDR1, (bool)(ADDR & 0x2));
+  digitalWrite(ADDR2, (bool)(ADDR & 0x4));
+  digitalWrite(ADDR3, (bool)(ADDR & 0x8));
+  // Serial.println(ADDR);
+  // delay(1000);
+
+  delayMicroseconds(300);
+  // delay(1000);
 }
 
 void setup()   {                
@@ -69,9 +87,14 @@ void setup()   {
 
   DATA_IN();
 
-  memset(KEYS_1, 0, sizeof(KEYS_1));
-  memset(KEYS_2, 0, sizeof(KEYS_2));
-  memset(KEYS_RECORDS, 0, sizeof(KEYS_RECORDS));
+  for(int i=0;i<37;++i){
+    KEYS_1[i].current_val=1;
+    KEYS_1[i].cnt=0;
+    KEYS_2[i].current_val=1;
+    KEYS_2[i].cnt=0;
+    KEYS_RECORDS[i].On=false;
+    KEYS_RECORDS[i].Velocity=0;
+  }
 
   for(int i=0;i<CV_OUT_CNT;++i){
     CV_OUT[i] = 128;
@@ -90,8 +113,8 @@ void ReadKey(byte offset, byte pin1, byte pin2)
 {
   bool k1, k2;
   bool kon = KEYS_RECORDS[offset].On;
-  k1 = DEBOUNCE_READ(DATA0, KEYS_1[offset]);
-  k2 = DEBOUNCE_READ(DATA1, KEYS_2[offset]);
+  k1 = DEBOUNCE_READ(pin1, KEYS_1[offset]);
+  k2 = DEBOUNCE_READ(pin2, KEYS_2[offset]);
   if(kon){
 
   }else{
@@ -120,9 +143,9 @@ void ReadKeys()
   {
     SET_ADDR(grp);
     ReadKey(offset++, DATA0, DATA1);
-    ReadKey(offset++, DATA2, DATA3);
-    //  The last group has only two keys
+    //  The last group has only one key
     if (grp == GROUP_CNT - 1) break;
+    ReadKey(offset++, DATA2, DATA3);
     ReadKey(offset++, DATA4, DATA5);
     ReadKey(offset++, DATA6, DATA7);
   }
@@ -141,15 +164,13 @@ void WriteCVOut()
 {
   DATA_OUT();
   SET_ADDR(DAC0832ADDR0);
-  udelay(50);
   DATA_WRITE(CV_OUT[0]);
-  udelay(50);
+  delayMicroseconds(50);
   SET_ADDR(DAC0832ADDR1);
-  udelay(50);
   DATA_WRITE(CV_OUT[1]);
-  udelay(50);
+  delayMicroseconds(50);
   SET_ADDR(DAC0832ADDRXFER);
-  udelay(50);
+  delayMicroseconds(50);
 }
 
 void ReadCVMuxIn()
@@ -167,15 +188,42 @@ void ReadCVMuxIn()
   }
 }
 
-void loop() {
-  //  read 37 keys
-  ReadKeys();
-  ReadCVIn();
-  WriteCVOut();
-  ReadCVMuxIn();
+int val[80];
+int oldval[80];
 
-  char* comlink = ReadCOM();
-  if(comlink != NULL){
-    //TODO MOSI commands
+void loop() {
+  byte grp;
+  byte offset = 0;
+  for(grp = 0; grp < GROUP_CNT; ++grp)
+  {
+    SET_ADDR(grp);
+    //val[offset++] = digitalRead(DATA0);
+    val[offset++] = (analogRead(7) > 950);
+    val[offset++] = digitalRead(DATA1);
+    val[offset++] = digitalRead(DATA2);
+    val[offset++] = digitalRead(DATA3);
+    val[offset++] = digitalRead(DATA4);
+    val[offset++] = digitalRead(DATA5);
+    val[offset++] = digitalRead(DATA6);
+    val[offset++] = digitalRead(DATA7);
   }
+  if(memcmp(val, oldval, sizeof(val))){
+    for(int i=0;i<80;++i){
+      Serial.print(val[i]);
+      Serial.print(' ');
+    }
+    Serial.println();
+    delay(1);
+  }
+  memcpy(oldval, val, sizeof(val));
+  //  read 37 keys
+  // ReadKeys();
+  // ReadCVIn();
+  // WriteCVOut();
+  // ReadCVMuxIn();
+
+  // char* comlink = ReadCOM();
+  // if(comlink != NULL){
+  //   //TODO MOSI commands
+  // }
 }
