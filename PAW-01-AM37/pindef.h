@@ -26,6 +26,9 @@
 #define CVMUXIN0 4
 #define CVMUXIN1 5
 #define CVMUXIN2 6
-#define CVMUXIN3 7
+// #define CVMUXIN3 7
+// unfortunately we've lost 1x4 cvmux due to a design error
+// mux3 is flyover to DATA0 because 74HC138 does not have enough fanin capacity to sink current from DATA0
+// resulting in D0 voltage too high. We have to use an analog pin to do it.
 
 #endif
