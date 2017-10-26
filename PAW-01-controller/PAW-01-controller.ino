@@ -1,8 +1,8 @@
 #include "Arduino.h"
 #include "pindef.h"
-#include "../debounced_button.h"
+#include "debounced_button.h"
 #include "utils.h"
-#include "../com.h"
+#include "com.h"
 
 int joy_x = 0, joy_y = 0;
 int joy_xzero = 512, joy_yzero = 512;
@@ -55,13 +55,14 @@ void post_event(int recepient, int event)
   routine_events[recepient] = v | event;
 }
 
+void set_menu_mode(int mode)
+{
+  routines[MENU_UPDATE_ROUTINE] = MenuRoutines[mode];
+}
+
 void change_mode(ROUTINE_TYPE recepient)
 {
   switch(recepient){
-    case MENU_UPDATE_ROUTINE:
-    if (NULL == MenuRoutines[++menuroutine_idx]) menuroutine_idx = 0;
-    routines[MENU_UPDATE_ROUTINE] = MenuRoutines[menuroutine_idx];
-    break;
     case STATUS_UPDATE_ROUTINE:
     /* ignore */
     break;
@@ -84,16 +85,13 @@ enum MENU_ITEM {
   // MENU_RESET,
   MENU_DIALMODE,
   MENU_JOYMODE,
-  MENU_MENUMODE,
+  MENU_OCTMODE,
+  MENU_MEDIAMODE,
+  MENU_KEYMODE,
   // MENU_POWER_LONG,
   MENU_ITEM_COUNT,
 };
 
-char* MenuRoutineNames[] = {
-  "Menu",
-  "Oct.",
-  NULL,
-};
 char* DialRoutineNames[] = {
   "Vol.",
   "MW.",
@@ -110,7 +108,6 @@ char* JoyRoutineNames[] = {
 
 void displayMenuItem(int item, bool current)
 {
-  if(current)display.print("->");
   switch(item){
     // case MENU_POWER_SHORT:
     // display.println("PWR.");
@@ -126,8 +123,14 @@ void displayMenuItem(int item, bool current)
     display.print("JOY: ");
     display.println(JoyRoutineNames[joyroutine_idx]);
     break;
-    case MENU_MENUMODE:
+    case MENU_OCTMODE:
     display.println("OCT Mode");
+    break;
+    case MENU_MEDIAMODE:
+    display.println("MEDIA Mode");
+    break;
+    case MENU_KEYMODE:
+    display.println("KEY Mode");
     break;
     // case MENU_POWER_LONG:
     // display.println("PANIC.");
@@ -144,8 +147,14 @@ void executeMenuItem(int item)
     // case MENU_RESET:
     // shortPullSwitch(DMOBO_RSTSW);
     // break;
-    case MENU_MENUMODE:
-    change_mode(MENU_UPDATE_ROUTINE);
+    case MENU_OCTMODE:
+    set_menu_mode(1);
+    break;
+    case MENU_MEDIAMODE:
+    set_menu_mode(2);
+    break;
+    case MENU_KEYMODE:
+    set_menu_mode(3);
     break;
     case MENU_DIALMODE:
     change_mode(DIAL_UPDATE_ROUTINE);
@@ -184,25 +193,80 @@ int UpdateMenu(int event)
   return -1;
 }
 
+int MediaMode(int event)
+{
+  if ((lb.current_val == LOW) && 
+      (mb.current_val == LOW) && 
+      (rb.current_val == LOW))
+  {
+    set_menu_mode(0);
+    return 0;
+  }
+
+  display.fillRect(0, 16, 64, 48, BLACK);
+  display.setCursor(0, 16);
+  display.println("MEDIA MODE");
+  display.println("<< ||> >>");
+
+  if (event & ME_UP){
+    Serial.println("MEDIA_PREV");
+  }
+  if (event & ME_DOWN){
+    Serial.println("MEDIA_PLAY");
+  }
+  if (event & ME_ENTER){
+    Serial.println("MEDIA_NEXT");
+  }
+  return -1;
+}
+
+int BrowseKeyMode(int event)
+{
+  if ((lb.current_val == LOW) && 
+      (mb.current_val == LOW) && 
+      (rb.current_val == LOW))
+  {
+    set_menu_mode(0);
+    return 0;
+  }
+
+  display.fillRect(0, 16, 64, 48, BLACK);
+  display.setCursor(0, 16);
+  display.println("KEY MODE");
+
+  if (event & ME_UP){
+    Serial.println("KEY_UP");
+  }
+  if (event & ME_DOWN){
+    Serial.println("KEY_DOWN");
+  }
+  if (event & ME_ENTER){
+    Serial.println("KEY_ENTER");
+  }
+  return -1;
+}
+
+
 int OctaveMode(int event)
 {
   if ((lb.current_val == LOW) && 
       (mb.current_val == LOW) && 
       (rb.current_val == LOW))
   {
-    change_mode(MENU_UPDATE_ROUTINE);
+    set_menu_mode(0);
     return 0;
   }
 
   display.fillRect(0, 16, 64, 48, BLACK);
   display.setCursor(0, 16);
-  display.println(">== OCT MODE ==<");
+  display.println("OCT MODE");
+  display.println("-  |  +");
 
   if (event & ME_UP){
-    Serial.println("OCU");
+    Serial.println("OCD");
   }
   if (event & ME_DOWN){
-    Serial.println("OCD");
+    Serial.println("OCU");
   }
   if (event & ME_ENTER){
     Serial.println("OCR");
@@ -300,13 +364,16 @@ int JoyMouse(int event)
 int JoyXY(int event)
 {
   if (event & JE_POS){
-
+    Serial.print("XY,");
+    Serial.print(joy_x);
+    Serial.print(",");
+    Serial.println(joy_y);
   }
   if (event & JE_PUSH){
-
+    Serial.println("XY_PUSH");
   }
   if (event & JE_RELEASE){
-
+    Serial.println("XY_RELEASE");
   }
   return -1;
 }
@@ -336,6 +403,8 @@ int routine_events[UPDATE_ROUTINE_COUNT];
 ROUTINE MenuRoutines[] = {
   UpdateMenu,
   OctaveMode,
+  MediaMode,
+  BrowseKeyMode,
   NULL,
 };
 

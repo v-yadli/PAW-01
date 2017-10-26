@@ -13,7 +13,7 @@ bool DEBOUNCE_READ(byte pin, DEBOUNCED_BUTTON& btn)
   byte pinval = digitalRead(pin);
   if(pinval != btn.current_val){
       btn.cnt++;
-      if(btn.cnt > DEBOUNCE_TIME){
+      if(btn.cnt > 0){
           btn.current_val = pinval;
           btn.cnt = 0;
           return true;
@@ -26,10 +26,11 @@ bool DEBOUNCE_READ(byte pin, DEBOUNCED_BUTTON& btn)
 
 bool DEBOUNCE_READ_ANALOG(byte pin, DEBOUNCED_BUTTON& btn)
 {
-  byte pinval = (analogRead(pin) > 950);
+  int aval = analogRead(pin);
+  byte pinval = (aval > 1010);
   if(pinval != btn.current_val){
       btn.cnt++;
-      if(btn.cnt > DEBOUNCE_TIME){
+      if(btn.cnt > 0){
           btn.current_val = pinval;
           btn.cnt = 0;
           return true;

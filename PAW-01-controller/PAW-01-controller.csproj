@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="System.IO.Ports"/>
     <PackageReference Include="InputSimulator"/>
+    <PackageReference Include="Sanford.Multimedia.Midi"/>
   </ItemGroup>
 
 </Project>

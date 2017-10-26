@@ -36,7 +36,7 @@ void DATA_IN()
   pinMode(DATA5, INPUT);
   pinMode(DATA6, INPUT);
   pinMode(DATA7, INPUT);
-  delayMicroseconds(300);
+  delayMicroseconds(50);
 }
 
 void DATA_OUT()
@@ -72,7 +72,7 @@ void SET_ADDR(byte ADDR)
   // Serial.println(ADDR);
   // delay(1000);
 
-  delayMicroseconds(100);
+  delayMicroseconds(50);
   // delay(1000);
 }
 
@@ -166,11 +166,11 @@ void ReadKeys()
     }
     if(!KEYS_RECORDS[i].On){
       if (!KEYS_1[i].current_val && KEYS_RECORDS[i].TriggerTime == 0){
-        KEYS_RECORDS[i].TriggerTime = micros();
+        KEYS_RECORDS[i].TriggerTime = millis();
       }
       if(!KEYS_2[i].current_val){
         KEYS_RECORDS[i].On = true;
-        long time = micros() - KEYS_RECORDS[i].TriggerTime;
+        long time = millis() - KEYS_RECORDS[i].TriggerTime;
         if(time < 0) {time += 2147483647;}
         Serial.print("KON,");
         Serial.print(i);
