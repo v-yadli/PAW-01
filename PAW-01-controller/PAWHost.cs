@@ -33,11 +33,11 @@ namespace YadliTechnology.PAW01
             stopped = false;
 
             Console.WriteLine("Opening controller port...");
-            SerialPort controllerPort = new SerialPort("COM127", 250000);
+            SerialPort controllerPort = new SerialPort("COM4", 250000);
             controllerPort.ReadTimeout = 1000;
             controllerPort.Open();
             Console.WriteLine("Opening keyboard port...");
-            SerialPort keyboardPort = new SerialPort("COM255", 250000);
+            SerialPort keyboardPort = new SerialPort("COM5", 250000);
             keyboardPort.ReadTimeout = 1000;
             keyboardPort.Open();
             Console.WriteLine("Opening Midi output port...");

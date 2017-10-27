@@ -119,9 +119,9 @@ void ReadKeys()
   for(grp = 0; grp < GROUP_CNT; ++grp)
   {
     SET_ADDR(grp * 2);
-    updates[offset1] |= DEBOUNCE_READ_ANALOG(7, KEYS_1[offset1]);
+    updates[offset1] |= DEBOUNCE_READ_ANALOG(ADATA0, KEYS_1[offset1]);
     offset1++;
-    updates[offset1] |= DEBOUNCE_READ(DATA1, KEYS_1[offset1]);
+    updates[offset1] |= DEBOUNCE_READ_ANALOG(ADATA1, KEYS_1[offset1]);
     offset1++;
     updates[offset1] |= DEBOUNCE_READ(DATA2, KEYS_1[offset1]);
     offset1++;
@@ -139,9 +139,9 @@ void ReadKeys()
       offset1++;
     }
     SET_ADDR(grp * 2 + 1);
-    updates[offset2] |= DEBOUNCE_READ_ANALOG(7, KEYS_2[offset2]);
+    updates[offset2] |= DEBOUNCE_READ_ANALOG(ADATA0, KEYS_2[offset2]);
     offset2++;
-    updates[offset2] |= DEBOUNCE_READ(DATA1, KEYS_2[offset2]);
+    updates[offset2] |= DEBOUNCE_READ_ANALOG(ADATA1, KEYS_2[offset2]);
     offset2++;
     updates[offset2] |= DEBOUNCE_READ(DATA2, KEYS_2[offset2]);
     offset2++;

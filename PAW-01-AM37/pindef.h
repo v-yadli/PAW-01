@@ -1,6 +1,8 @@
 #ifndef PINDEF_H
 #define PINDEF_H
 
+#define ADATA0 7
+#define ADATA1 6
 #define DATA0 1
 #define DATA1 0
 #define DATA2 2
