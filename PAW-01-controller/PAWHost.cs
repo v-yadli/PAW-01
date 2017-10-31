@@ -20,8 +20,7 @@ namespace YadliTechnology.PAW01
     class PAWHost
     {
         static volatile int mx = 0, my = 0;
-        const int DEADZONE = 15;
-        const double MAXZONE = 110.0;
+        const double MAXZONE = 512;
         static InputSimulator simulator;
         static OutputDevice midiout;
         static volatile bool stopped;
@@ -33,11 +32,11 @@ namespace YadliTechnology.PAW01
             stopped = false;
 
             Console.WriteLine("Opening controller port...");
-            SerialPort controllerPort = new SerialPort("COM4", 250000);
+            SerialPort controllerPort = new SerialPort("COM127", 250000);
             controllerPort.ReadTimeout = 1000;
             controllerPort.Open();
             Console.WriteLine("Opening keyboard port...");
-            SerialPort keyboardPort = new SerialPort("COM5", 250000);
+            SerialPort keyboardPort = new SerialPort("COM255", 250000);
             keyboardPort.ReadTimeout = 1000;
             keyboardPort.Open();
             Console.WriteLine("Opening Midi output port...");
@@ -176,6 +175,9 @@ namespace YadliTechnology.PAW01
                     case "OCD":
                         OctaveShift(-1);
                         break;
+                    case "DMP":
+                        simulator.Keyboard.KeyPress(VirtualKeyCode.TAB);
+                        break;
                     case "OCR":
                         octave=0;
                         break;
@@ -238,19 +240,43 @@ namespace YadliTechnology.PAW01
 
         private static void MouseProc(object state)
         {
+            double accel = 0.0;
+            double _dx = 0.0; double _dy = 0.0;
+            double a = 0.55;
+            double base_speed = 5.0;
+            double accel_max = 5.0;
+            double accel_incr = 0.05;
             while(true)
             {
                 if(stopped)return;
 
                 Thread.Sleep(10);
-                if (Math.Abs(mx) < DEADZONE && Math.Abs(my) < DEADZONE) continue;
                 double len = Math.Sqrt(Math.Pow(mx, 2) + Math.Pow(my, 2));
                 double dx = Math.Abs(mx) / len;
                 double dy = Math.Abs(my) / len;
 
-                dx = Math.Pow(dx, 2);
-                dy = Math.Pow(dy, 2);
-                len = Math.Min(len, MAXZONE) / MAXZONE * 4;
+                if(dx > 0.95 || dy > 0.95){
+                    accel = Math.Min(accel + accel_incr, accel_max);
+                }else{
+                    accel = Math.Max(accel - 0.3, 0.0);
+                }
+
+                if(mx == 0 && my == 0) continue;
+
+                dx = _dx * a + dx * (1.0 - a);
+                dy = _dy * a + dy * (1.0 - a);
+                _dx = dx;
+                _dy = dy;
+
+                // dx = Math.Pow(dx, 2);
+                // dy = Math.Pow(dy, 2);
+                // Console.WriteLine(len);
+                len = Math.Min(len, MAXZONE) / MAXZONE; // normalized
+                len = Math.Pow(100, len) / 100.0;
+                len = len * (base_speed + accel);
+                // len *= 4;
+                // Console.WriteLine(len);
+                // len = Math.Pow(2, len) * 10;
                 simulator.Mouse.MoveMouseBy((int)(dx * len * Math.Sign(mx)), (int)(dy * len * Math.Sign(my)));
             }
         }

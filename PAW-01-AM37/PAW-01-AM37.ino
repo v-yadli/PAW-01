@@ -221,7 +221,7 @@ void ReadCVMuxIn()
     SET_ADDR(grp);
     CVMUX_IN[offset++] = analogRead(CVMUXIN0);
     CVMUX_IN[offset++] = analogRead(CVMUXIN1);
-    CVMUX_IN[offset++] = analogRead(CVMUXIN2);
+    // CVMUX_IN[offset++] = analogRead(CVMUXIN2);
     // CVMUX_IN[offset++] = analogRead(CVMUXIN3);
   }
 }

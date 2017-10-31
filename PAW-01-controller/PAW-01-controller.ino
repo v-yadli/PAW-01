@@ -5,8 +5,8 @@
 #include "com.h"
 
 int joy_x = 0, joy_y = 0;
-int joy_xzero = 512, joy_yzero = 512;
-int joy_deadzone = 50;
+int joy_xzero = 520, joy_yzero = 526;
+int joy_deadzone = 8;
 int transpose = 0;
 
 DEBOUNCED_BUTTON pwr_led = {0, 0};
@@ -305,10 +305,10 @@ int DialMouseWheel(int event)
     MouseMove(0, 1, 1);
   }
   if (event & DE_PUSH){
-    MousePush(MOUSE_MIDDLE);
+    Serial.println("DMP");
   }
   if (event & DE_RELEASE){
-    MouseRelease(MOUSE_MIDDLE);
+    Serial.println("DMR");
   }
   return -1;
 }
@@ -350,7 +350,7 @@ int DialController(int event)
 int JoyMouse(int event)
 {
   if (event & JE_POS){
-    MouseMove(joy_x / 5, joy_y / 5, 0);
+    MouseMove(joy_x, joy_y, 0);
   }
   if (event & JE_PUSH){
     MousePush(MOUSE_LEFT);
@@ -538,14 +538,10 @@ void read()
   int jx = analogRead(ACNT_JOYX) - joy_xzero;
   int jy = analogRead(ACNT_JOYY) - joy_yzero;
 
-  if((abs(jx) >= joy_deadzone && jx != joy_x) ||
-     (abs(jy) >= joy_deadzone && jy != joy_y))
-  {
-    post_event(JOY_UPDATE_ROUTINE, JE_POS);
-  }
+  if(abs(jx) < joy_deadzone) jx = 0;
+  if(abs(jy) < joy_deadzone) jy = 0;
 
-  if((abs(jx) < joy_deadzone && abs(joy_x) >= joy_deadzone) ||
-     (abs(jy) < joy_deadzone && abs(joy_y) >= joy_deadzone))
+  if(jx != joy_x || jy != joy_y)
   {
     post_event(JOY_UPDATE_ROUTINE, JE_POS);
   }
