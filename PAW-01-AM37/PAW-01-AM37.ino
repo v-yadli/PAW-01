@@ -49,6 +49,7 @@ void DATA_OUT()
   pinMode(DATA5, OUTPUT);
   pinMode(DATA6, OUTPUT);
   pinMode(DATA7, OUTPUT);
+  delayMicroseconds(50);
 }
 
 void DATA_WRITE(byte value)
@@ -61,6 +62,7 @@ void DATA_WRITE(byte value)
   digitalWrite(DATA5, (bool)(value & 0x20));
   digitalWrite(DATA6, (bool)(value & 0x40));
   digitalWrite(DATA7, (bool)(value & 0x80));
+  delayMicroseconds(50);
 }
 
 void SET_ADDR(byte ADDR)
@@ -192,19 +194,44 @@ void ReadKeys()
 void ReadCVIn()
 {
   DATA_IN();
-  CV_IN[0] = analogRead(CVIN0);
-  CV_IN[1] = analogRead(CVIN1);
-  CV_IN[2] = analogRead(CVIN2);
-  CV_IN[3] = analogRead(CVIN3);
+
+  int cv0= analogRead(CVIN0);
+  int cv1= analogRead(CVIN1);
+  int cv2= analogRead(CVIN2);
+  int cv3= analogRead(CVIN3);
+
+  if(cv0 != CV_IN[0]){
+    Serial.print("CC,0,");
+    Serial.println(cv0);
+  }
+  if(cv1 != CV_IN[1]){
+    Serial.print("CC,1,");
+    Serial.println(cv1);
+  }
+  if(cv2 != CV_IN[2]){
+    Serial.print("CC,2,");
+    Serial.println(cv2);
+  }
+  if(cv3 != CV_IN[3]){
+    Serial.print("CC,3,");
+    Serial.println(cv3);
+  }
+
+  CV_IN[0] = cv0;
+  CV_IN[1] = cv1;
+  CV_IN[2] = cv2;
+  CV_IN[3] = cv3;
 }
 
 void WriteCVOut()
 {
   DATA_OUT();
   SET_ADDR(DAC0832ADDR0);
+  delayMicroseconds(50);
   DATA_WRITE(CV_OUT[0]);
   delayMicroseconds(50);
   SET_ADDR(DAC0832ADDR1);
+  delayMicroseconds(50);
   DATA_WRITE(CV_OUT[1]);
   delayMicroseconds(50);
   SET_ADDR(DAC0832ADDRXFER);
@@ -263,10 +290,21 @@ void loop() {
   ReadKeys();
   ReadCVIn();
   WriteCVOut();
-  ReadCVMuxIn();
+  //ReadCVMuxIn();
 
   char* comlink = ReadCOM();
   if(comlink != NULL){
-    //TODO MOSI commands
+    if(comlink[0] == 0x01){
+      //two bytes after this flag. "CVOUT_ID,VALUE"
+      //CVOUT_ID is 0-1
+      //the value should be 0-255.
+      byte cvout_id = comlink[1];
+      byte val = comlink[2];
+      Serial.print("INFO,CVOUT-");
+      Serial.print(cvout_id);
+      Serial.print(" SET TO ");
+      Serial.println(val);
+      CV_OUT[cvout_id] = val;
+    }
   }
 }

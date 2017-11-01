@@ -7,7 +7,7 @@ char receivedChars[numChars];
 char* ReadCOM() {
     char endMarker = '\n';
     int read_bytes = 0;
-    Serial.setTimeout(50);
+    Serial.setTimeout(5);
     if(Serial.available()){
         read_bytes = Serial.readBytesUntil(endMarker, receivedChars, numChars - 1);
         if(read_bytes != 0){

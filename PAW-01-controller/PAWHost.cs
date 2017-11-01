@@ -23,6 +23,7 @@ namespace YadliTechnology.PAW01
         const double MAXZONE = 512;
         static InputSimulator simulator;
         static OutputDevice midiout;
+        static InputDevice midiin;
         static volatile bool stopped;
         static int octave = 0;
 
@@ -41,6 +42,10 @@ namespace YadliTechnology.PAW01
             keyboardPort.Open();
             Console.WriteLine("Opening Midi output port...");
             midiout = new OutputDevice(1);
+            Console.WriteLine("Opening Midi input port...");
+            midiin = new InputDevice(1);
+            midiin.ChannelMessageReceived += (o, e) => MidiInHandler(keyboardPort, e.Message);
+            midiin.StartRecording();
             Console.WriteLine("Opening input simulator...");
             simulator = new InputSimulator();
 
@@ -61,6 +66,9 @@ namespace YadliTechnology.PAW01
             Console.WriteLine("PAW-01 Host shutting down...");
             stopped = true;
 
+            midiin.StopRecording();
+            midiin.Close();
+            midiin.Dispose();
             midiout.Close();
             midiout.Dispose();
 
@@ -77,32 +85,63 @@ namespace YadliTechnology.PAW01
             Main(args);
         }
 
+        private static void MidiInHandler(SerialPort port, ChannelMessage msg)
+        {
+            try
+            {
+                byte[] val = new byte[]{0x01, 0x00, (byte)(msg.Data2 * 2), (byte)'\n'};
+                switch (msg.Command)
+                {
+                    case ChannelCommand.Controller:
+                        if (msg.Data1 == 102)
+                        {
+                            System.Console.WriteLine(msg.Data2 * 2);
+                            port.Write(val, 0, 4);
+                        }
+                        else if (msg.Data1 == 103)
+                        {
+                            System.Console.WriteLine(msg.Data2 * 2);
+                            val[1] = 0x01;
+                            port.Write(val, 0, 4);
+                        }
+                        break;
+                }
+            }
+            catch { }
+        }
+
         private static void KeyboardProc(object state)
         {
             var serialPort = (SerialPort)state;
             while (true)
             {
-                if(stopped)return;
+                if (stopped) return;
 
                 string content = "";
-                try{ content = serialPort.ReadLine(); }catch{continue;}
-                System.Console.WriteLine(content);
+                try { content = serialPort.ReadLine(); } catch { continue; }
+                // System.Console.WriteLine(content);
                 var split = content.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(_ => _.Trim()).ToArray();
                 switch (split[0])
                 {
+                    case "INFO":
+                    System.Console.WriteLine(content);
+                    break;
                     case "KON":
-                    KeyOn(ParseArgs(split));
-                    break;
+                        KeyOn(ParseArgs(split));
+                        break;
                     case "KOFF":
-                    KeyOff(ParseArgs(split)[0]);
-                    break;
+                        KeyOff(ParseArgs(split)[0]);
+                        break;
+                    case "CC":
+                        CC(ParseArgs(split));
+                        break;
                 }
             }
         }
 
-// http://tonalsoft.com/pub/pitch-bend/pitch.2005-08-31.17-00.aspx
-// The General MIDI specification assigns the number 69 to A440
-// That is, Key 69 = AM37 Key 16, at OCT=0
+        // http://tonalsoft.com/pub/pitch-bend/pitch.2005-08-31.17-00.aspx
+        // The General MIDI specification assigns the number 69 to A440
+        // That is, Key 69 = AM37 Key 16, at OCT=0
         private static int AM37toMidiNote(int key)
         {
             return (key - 16 + 69) + 12 * octave;
@@ -117,6 +156,37 @@ namespace YadliTechnology.PAW01
             // val = Math.Pow(val, 2);
             // return (int)(val * 127.0f * 2);
         }
+
+        private static int[] CC_TABLE = new[] { 104, 105, 106, 107 };
+        private static bool AfterTouch_On = false;
+
+        private static void CC(int[] v)
+        {
+            // if(v[0] > 1) return;
+            int cc = CC_TABLE[v[0]];
+            int val = v[1];
+            ChannelMessage msg = null;
+            // System.Console.WriteLine($"{cc},{val}");
+            if (cc == 107)
+            { // aftertouch pin
+                val = 128 - val / 8;
+                if (val < 32)
+                {
+                    val = 0;
+                    if (!AfterTouch_On) return;
+                    AfterTouch_On = false;
+                }
+                AfterTouch_On = true;
+                msg = new ChannelMessage(ChannelCommand.ChannelPressure, 0, val);
+            }
+            else
+            {
+                val = val / 8;
+                msg = new ChannelMessage(ChannelCommand.Controller, 0, cc, val);
+            }
+            midiout.Send(msg);
+        }
+
 
         private static void KeyOff(int k)
         {
@@ -135,13 +205,16 @@ namespace YadliTechnology.PAW01
             var serialPort = (SerialPort)state;
             while (true)
             {
-                if(stopped)return;
+                if (stopped) return;
 
                 string content = "";
-                try{ content = serialPort.ReadLine(); }catch{continue;}
+                try { content = serialPort.ReadLine(); } catch { continue; }
                 var split = content.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(_ => _.Trim()).ToArray();
                 switch (split[0])
                 {
+                    case "INFO":
+                    System.Console.WriteLine(content);
+                    break;
                     case "VLD":
                         VolumeUp();
                         break;
@@ -179,7 +252,7 @@ namespace YadliTechnology.PAW01
                         simulator.Keyboard.KeyPress(VirtualKeyCode.TAB);
                         break;
                     case "OCR":
-                        octave=0;
+                        octave = 0;
                         break;
                     case "KEY_UP":
                         simulator.Keyboard.KeyPress(VirtualKeyCode.UP);
@@ -205,7 +278,7 @@ namespace YadliTechnology.PAW01
 
         private static void XY_PEDAL(bool on)
         {
-            ChannelMessage msg = new ChannelMessage(ChannelCommand.Controller, 0, 64, on? 127:0);
+            ChannelMessage msg = new ChannelMessage(ChannelCommand.Controller, 0, 64, on ? 127 : 0);
             midiout.Send(msg);
         }
 
@@ -226,11 +299,13 @@ namespace YadliTechnology.PAW01
             midiout.Send(msgx);
 
             ChannelMessage msgy;
-            if(y >= 0.0)
+            if (y >= 0.0)
             {
                 int mody = (int)(y * 254);
                 msgy = new ChannelMessage(ChannelCommand.Controller, 0, 1, mody); //mod
-            }else{
+            }
+            else
+            {
                 int c = (int)(y * -254);
                 msgy = new ChannelMessage(ChannelCommand.Controller, 0, 2, c); //2=breath
                 // msgy = new ChannelMessage(ChannelCommand.Controller, 0, 84, c); //84=porta control
@@ -246,22 +321,25 @@ namespace YadliTechnology.PAW01
             double base_speed = 5.0;
             double accel_max = 5.0;
             double accel_incr = 0.05;
-            while(true)
+            while (true)
             {
-                if(stopped)return;
+                if (stopped) return;
 
                 Thread.Sleep(10);
                 double len = Math.Sqrt(Math.Pow(mx, 2) + Math.Pow(my, 2));
                 double dx = Math.Abs(mx) / len;
                 double dy = Math.Abs(my) / len;
 
-                if(dx > 0.95 || dy > 0.95){
+                if (dx > 0.95 || dy > 0.95)
+                {
                     accel = Math.Min(accel + accel_incr, accel_max);
-                }else{
+                }
+                else
+                {
                     accel = Math.Max(accel - 0.3, 0.0);
                 }
 
-                if(mx == 0 && my == 0) continue;
+                if (mx == 0 && my == 0) continue;
 
                 dx = _dx * a + dx * (1.0 - a);
                 dy = _dy * a + dy * (1.0 - a);
@@ -315,15 +393,15 @@ namespace YadliTechnology.PAW01
             switch (mb)
             {
                 case MouseButton.LEFT:
-                    if(isPress) simulator.Mouse.LeftButtonDown();
+                    if (isPress) simulator.Mouse.LeftButtonDown();
                     else simulator.Mouse.LeftButtonUp();
                     break;
                 case MouseButton.MIDDLE:
-                    if(isPress) simulator.Mouse.XButtonDown(2);
+                    if (isPress) simulator.Mouse.XButtonDown(2);
                     else simulator.Mouse.XButtonUp(2);
                     break;
                 case MouseButton.RIGHT:
-                    if(isPress) simulator.Mouse.RightButtonDown();
+                    if (isPress) simulator.Mouse.RightButtonDown();
                     else simulator.Mouse.RightButtonUp();
                     break;
             }
