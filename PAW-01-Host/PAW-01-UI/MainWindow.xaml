@@ -1,0 +1,22 @@
+﻿<Window x:Class="YadliTechnology.UIMainWin"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:YadliTechnology"
+        mc:Ignorable="d"
+        Loaded="UILoaded"
+        Closed="UIMainWin_Closed"
+        WindowStyle="None"
+        Title="MainWindow" Height="350" Width="525">
+    <Grid>
+        <TabControl x:Name="tabControl" Background="AliceBlue">
+            <TabItem Header="Keyboard" Background="Aqua">
+                <Grid Background="#31616A" x:Name="grid_Keyboard"/>
+            </TabItem>
+            <TabItem Header="TabItem">
+                <Grid Background="#FFE5E5E5"/>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

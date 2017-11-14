@@ -17,7 +17,7 @@ namespace YadliTechnology.PAW01
         MIDDLE = 1,
         RIGHT = 2,
     }
-    class PAWHost
+    public static class PAWHost
     {
         static volatile int mx = 0, my = 0;
         const double MAXZONE = 512;
@@ -26,51 +26,58 @@ namespace YadliTechnology.PAW01
         static InputDevice midiin;
         static volatile bool stopped;
         static int octave = 0;
+        private static readonly char[] s_split = new char[] { ',' };
 
-        static void Main(string[] args)
+        public static void Start()
         {
             Console.WriteLine("PAW-01 Signal Converter Host, v0.1");
             stopped = false;
 
             Console.WriteLine("Opening controller port...");
-            SerialPort controllerPort = new SerialPort("COM127", 250000);
+            controllerPort = new SerialPort("COM127", 250000);
             controllerPort.ReadTimeout = 1000;
             controllerPort.Open();
             Console.WriteLine("Opening keyboard port...");
-            SerialPort keyboardPort = new SerialPort("COM255", 250000);
+            keyboardPort = new SerialPort("COM255", 250000);
             keyboardPort.ReadTimeout = 1000;
             keyboardPort.Open();
             Console.WriteLine("Opening Midi output port...");
             midiout = new OutputDevice(1);
             Console.WriteLine("Opening Midi input port...");
             midiin = new InputDevice(1);
-            midiin.ChannelMessageReceived += (o, e) => MidiInHandler(keyboardPort, e.Message);
+            midiin.ChannelMessageReceived += (o, e) => MidiInHandler(e.Message);
             midiin.StartRecording();
             Console.WriteLine("Opening input simulator...");
             simulator = new InputSimulator();
 
             Console.WriteLine("Initializing mouse...");
-            Thread mouseProc = new Thread(MouseProc);
+            mouseProc = new Thread(MouseProc);
             mouseProc.Start(null);
 
             Console.WriteLine("Initializing keyboard...");
-            Thread keyboardProc = new Thread(KeyboardProc);
+            keyboardProc = new Thread(KeyboardProc);
             keyboardProc.Start(keyboardPort);
 
             Console.WriteLine("Initializing controller...");
-            Thread controllerProc = new Thread(ControllerProc);
+            controllerProc = new Thread(ControllerProc);
             controllerProc.Start(controllerPort);
 
             Console.WriteLine("PAW-01 Host started. Press anykey to pause...");
-            Console.ReadKey();
+        }
+
+        public static void Stop()
+        {
             Console.WriteLine("PAW-01 Host shutting down...");
             stopped = true;
 
-            midiin.StopRecording();
-            midiin.Close();
-            midiin.Dispose();
-            midiout.Close();
-            midiout.Dispose();
+            lock (keyboardPort)
+            {
+                midiin.StopRecording();
+                midiin.Close();
+                midiin.Dispose();
+                midiout.Close();
+                midiout.Dispose();
+            }
 
             mouseProc.Join();
             keyboardProc.Join();
@@ -79,35 +86,37 @@ namespace YadliTechnology.PAW01
             keyboardPort.Close();
             controllerPort.Close();
             Console.WriteLine("Ports offline.");
-
-            Console.WriteLine("PAW-01 Host paused. Press anykey to restart...");
-            Console.ReadKey();
-            Main(args);
         }
 
-        private static void MidiInHandler(SerialPort port, ChannelMessage msg)
+        private static void MidiInHandler(ChannelMessage msg)
         {
-            try
+            lock (keyboardPort)
             {
-                byte[] val = new byte[]{0x01, 0x00, (byte)(msg.Data2 * 2), (byte)'\n'};
-                switch (msg.Command)
+                if (stopped) return;
+                try
                 {
-                    case ChannelCommand.Controller:
-                        if (msg.Data1 == 102)
-                        {
-                            System.Console.WriteLine(msg.Data2 * 2);
-                            port.Write(val, 0, 4);
-                        }
-                        else if (msg.Data1 == 103)
-                        {
-                            System.Console.WriteLine(msg.Data2 * 2);
-                            val[1] = 0x01;
-                            port.Write(val, 0, 4);
-                        }
-                        break;
+                    byte[] val = new byte[] { 0x01, 0x00, (byte)(msg.Data2 * 2), (byte)'\n' };
+                    switch (msg.Command)
+                    {
+                        case ChannelCommand.Controller:
+                            if (msg.Data1 == 102)
+                            {
+                                System.Console.WriteLine(msg.Data2 * 2);
+                                keyboardPort.Write(val, 0, 4);
+                                //keyboardPort.Write(val, 0, 4);
+                            }
+                            else if (msg.Data1 == 103)
+                            {
+                                System.Console.WriteLine(msg.Data2 * 2);
+                                val[1] = 0x01;
+                                keyboardPort.Write(val, 0, 4);
+                                //keyboardPort.Write(val, 0, 4);
+                            }
+                            break;
+                    }
                 }
+                catch { }
             }
-            catch { }
         }
 
         private static void KeyboardProc(object state)
@@ -118,23 +127,32 @@ namespace YadliTechnology.PAW01
                 if (stopped) return;
 
                 string content = "";
-                try { content = serialPort.ReadLine(); } catch { continue; }
-                // System.Console.WriteLine(content);
-                var split = content.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(_ => _.Trim()).ToArray();
-                switch (split[0])
+                lock (serialPort)
                 {
-                    case "INFO":
-                    System.Console.WriteLine(content);
-                    break;
-                    case "KON":
-                        KeyOn(ParseArgs(split));
-                        break;
-                    case "KOFF":
-                        KeyOff(ParseArgs(split)[0]);
-                        break;
-                    case "CC":
-                        CC(ParseArgs(split));
-                        break;
+                    try { content = serialPort.ReadLine(); } catch { continue; }
+                }
+                try
+                {
+                    var split = content.Split(s_split, StringSplitOptions.RemoveEmptyEntries).Select(_ => _.Trim()).ToArray();
+                    switch (split[0])
+                    {
+                        case "INFO":
+                            System.Console.WriteLine(content);
+                            break;
+                        case "KON":
+                            KeyOn(ParseArgs(split));
+                            break;
+                        case "KOFF":
+                            KeyOff(ParseArgs(split)[0]);
+                            break;
+                        case "CC":
+                            CC(ParseArgs(split));
+                            break;
+                    }
+
+                }
+                catch (Exception)
+                {
                 }
             }
         }
@@ -159,6 +177,11 @@ namespace YadliTechnology.PAW01
 
         private static int[] CC_TABLE = new[] { 104, 105, 106, 107 };
         private static bool AfterTouch_On = false;
+        private static SerialPort keyboardPort;
+        private static SerialPort controllerPort;
+        private static Thread controllerProc;
+        private static Thread keyboardProc;
+        private static Thread mouseProc;
 
         private static void CC(int[] v)
         {
@@ -187,7 +210,6 @@ namespace YadliTechnology.PAW01
             midiout.Send(msg);
         }
 
-
         private static void KeyOff(int k)
         {
             var msg = new ChannelMessage(ChannelCommand.NoteOff, 0, AM37toMidiNote(k));
@@ -209,12 +231,12 @@ namespace YadliTechnology.PAW01
 
                 string content = "";
                 try { content = serialPort.ReadLine(); } catch { continue; }
-                var split = content.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(_ => _.Trim()).ToArray();
+                var split = content.Split(s_split, StringSplitOptions.RemoveEmptyEntries).Select(_ => _.Trim()).ToArray();
                 switch (split[0])
                 {
                     case "INFO":
-                    System.Console.WriteLine(content);
-                    break;
+                        System.Console.WriteLine(content);
+                        break;
                     case "VLD":
                         VolumeUp();
                         break;
@@ -318,25 +340,38 @@ namespace YadliTechnology.PAW01
             double accel = 0.0;
             double _dx = 0.0; double _dy = 0.0;
             double a = 0.55;
-            double base_speed = 5.0;
-            double accel_max = 5.0;
+            double base_speed = 3.0;
+            double accel_max = 7.0;
             double accel_incr = 0.05;
             while (true)
             {
                 if (stopped) return;
 
                 Thread.Sleep(10);
+
+                //  Project the Rectangular X-Y range to Circular.
+
                 double len = Math.Sqrt(Math.Pow(mx, 2) + Math.Pow(my, 2));
                 double dx = Math.Abs(mx) / len;
                 double dy = Math.Abs(my) / len;
 
-                if (dx > 0.95 || dy > 0.95)
+                //   Now, (dx, dy) falls on the circle of R=1
+                //   Update len to normalize it according to the angle
+                double k = Math.Sqrt(1 + Math.Pow(Math.Min(dx, dy), 2));
+                len = Math.Min(len, MAXZONE) / MAXZONE;
+                len = len / k; // normalized
+                len = Math.Pow(20, len) / 20.0;
+                len = len * (base_speed + accel);
+
+
+
+                if (len > 0.97)
                 {
                     accel = Math.Min(accel + accel_incr, accel_max);
                 }
                 else
                 {
-                    accel = Math.Max(accel - 0.3, 0.0);
+                    accel = Math.Max(accel - 1, 0.0);
                 }
 
                 if (mx == 0 && my == 0) continue;
@@ -346,15 +381,6 @@ namespace YadliTechnology.PAW01
                 _dx = dx;
                 _dy = dy;
 
-                // dx = Math.Pow(dx, 2);
-                // dy = Math.Pow(dy, 2);
-                // Console.WriteLine(len);
-                len = Math.Min(len, MAXZONE) / MAXZONE; // normalized
-                len = Math.Pow(100, len) / 100.0;
-                len = len * (base_speed + accel);
-                // len *= 4;
-                // Console.WriteLine(len);
-                // len = Math.Pow(2, len) * 10;
                 simulator.Mouse.MoveMouseBy((int)(dx * len * Math.Sign(mx)), (int)(dy * len * Math.Sign(my)));
             }
         }
