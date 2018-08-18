@@ -2,8 +2,9 @@
 #define MOUSE_MIDDLE 1
 #define MOUSE_RIGHT 2
 
-const byte numChars = 32;
+const byte numChars = 12;
 char receivedChars[numChars];
+
 char* ReadCOM() {
     char endMarker = '\n';
     int read_bytes = 0;
@@ -15,28 +16,27 @@ char* ReadCOM() {
             return receivedChars;
         }
     }
-
     return NULL;
 }
 
 void MousePush(int button)
 {
-    Serial.print("MP,");
+    Serial.print(F("MP,"));
     Serial.println(button);
 }
 
 void MouseRelease(int button)
 {
-    Serial.print("MR,");
+    Serial.print(F("MR,"));
     Serial.println(button);
 }
 
 void MouseMove(int x, int y, int wheel)
 {
-    Serial.print("MM,");
+    Serial.print(F("MM,"));
     Serial.print(x);
-    Serial.print(",");
+    Serial.print(F(","));
     Serial.print(y);
-    Serial.print(",");
+    Serial.print(F(","));
     Serial.println(wheel);
 }

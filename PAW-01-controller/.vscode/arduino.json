@@ -2,5 +2,6 @@
     "board": "arduino:avr:nano",
     "configuration": "cpu=atmega328",
     "sketch": "PAW-01-controller.ino",
-    "port": "COM127"
+    "port": "COM127",
+    "output": "../arduino_build"
 }

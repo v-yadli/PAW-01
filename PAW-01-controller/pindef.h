@@ -8,6 +8,7 @@
 //  the pin to one that we will use for output.
 
 #define OLED_CS -1
+// PWRLED, PWRSW, RSTSW offline
 #define DMOBO_PWRLED 0
 #define DMOBO_PWRSW  1
 #define DMOBO_RSTSW  2
@@ -18,7 +19,7 @@
 #define OLED_RESET 7
 #define DCNT_DIALSW 8
 #define DCNT_JOYSW 9
-// pin10 reserved for PWM
+#define PWM_EL 10
 #define OLED_SDA 11
 // volume board is damaged. DIALMUX offline
 #define DCNT_DIALMUX  12

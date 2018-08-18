@@ -1,15 +1,13 @@
-#include "Arduino.h"
 #include "pindef.h"
 #include "debounced_button.h"
 #include "utils.h"
 #include "com.h"
+#define joy_deadzone 8
+#define joy_xzero 520
+#define joy_yzero 526
+int joy_x = 0;
+int joy_y = 0;
 
-int joy_x = 0, joy_y = 0;
-int joy_xzero = 520, joy_yzero = 526;
-int joy_deadzone = 8;
-int transpose = 0;
-
-DEBOUNCED_BUTTON pwr_led = {0, 0};
 DEBOUNCED_BUTTON lb = {0, 0};
 DEBOUNCED_BUTTON mb = {0, 0};
 DEBOUNCED_BUTTON rb = {0, 0};
@@ -23,33 +21,42 @@ extern ROUTINE routines[];
 extern ROUTINE MenuRoutines[];
 extern ROUTINE DialRoutines[];
 extern ROUTINE JoyRoutines[];
+extern ROUTINE MonRoutines[];
 extern int routine_events[];
 
-int menuroutine_idx = 0;
+#define EL_DUTY_MIN 0
+#define EL_DUTY_MAX 399
+
+int menu_mode = 0;
 int dialroutine_idx = 0;
 int joyroutine_idx = 0;
+int monroutine_idx = 0;
+int el_duty = 0;
+char* comlink = nullptr;
+
+LONGPRESS_RECORD lp_k1 = {0, 0};
+LONGPRESS_RECORD lp_k2 = {0, 0};
+LONGPRESS_RECORD lp_k3 = {0, 0};
+LONGPRESS_RECORD lp_joy = {0, 0};
+LONGPRESS_RECORD lp_dial = {0, 0};
 
 enum ROUTINE_TYPE {
   // Always update menu first, as the routine
   // can be changed if a menu item is triggered.
   MENU_UPDATE_ROUTINE = 0,
-  STATUS_UPDATE_ROUTINE,
   DIAL_UPDATE_ROUTINE,
   JOY_UPDATE_ROUTINE,
+  MON_UPDATE_ROUTINE,
+  STATUS_UPDATE_ROUTINE,
   UPDATE_ROUTINE_COUNT,
 };
 
-enum MenuEvent { ME_UP = 1, ME_DOWN = 2, ME_ENTER = 4, };
+enum KeyEvent { K1_DOWN = 1, K2_DOWN = 2, K3_DOWN = 4, K1_UP = 8, K2_UP = 16, K3_UP = 32};
 enum DialEvent { DE_UP = 1, DE_DOWN = 2, DE_PUSH = 4, DE_RELEASE = 8, };
 enum JoyEvent { JE_POS = 1, JE_PUSH = 2, JE_RELEASE = 4, };
 
 void post_event(int recepient, int event)
 {
-  // Serial.print("post_event ");
-  // Serial.print(event);
-  // Serial.print(" to ");
-  // Serial.print(recepient);
-  // Serial.println();
   int v = routine_events[recepient];
   if(v < 0) v = 0;
   routine_events[recepient] = v | event;
@@ -57,6 +64,7 @@ void post_event(int recepient, int event)
 
 void set_menu_mode(int mode)
 {
+  menu_mode = mode;
   routines[MENU_UPDATE_ROUTINE] = MenuRoutines[mode];
 }
 
@@ -74,6 +82,10 @@ void change_mode(ROUTINE_TYPE recepient)
     if (NULL == JoyRoutines[++joyroutine_idx]) joyroutine_idx = 0;
     routines[JOY_UPDATE_ROUTINE] = JoyRoutines[joyroutine_idx];
     break;
+    case MON_UPDATE_ROUTINE:
+    if (NULL == MonRoutines[++monroutine_idx]) monroutine_idx = 0;
+    routines[MON_UPDATE_ROUTINE] = MonRoutines[monroutine_idx];
+    break;
   }
 }
 
@@ -88,53 +100,64 @@ enum MENU_ITEM {
   MENU_OCTMODE,
   MENU_MEDIAMODE,
   MENU_KEYMODE,
+  MENU_MONITORMODE,
   // MENU_POWER_LONG,
   MENU_ITEM_COUNT,
 };
 
-char* DialRoutineNames[] = {
-  "Vol.",
-  "MW.",
-  "TP.",
-  "Ctl.",
-  NULL,
+const char DRN_0[] PROGMEM = "VL.";
+const char DRN_1[] PROGMEM = "MW.";
+const char DRN_2[] PROGMEM = "TP.";
+const char DRN_3[] PROGMEM = "CT.";
+
+const char* const DialRoutineNames[] PROGMEM = {
+  DRN_0, DRN_1, DRN_2, DRN_3, NULL,
 };
-char* JoyRoutineNames[] = {
-  "Mouse",
-  "XY",
-  "TP.",
-  NULL,
+
+const char JRN_0[] PROGMEM = "MS.";
+const char JRN_1[] PROGMEM = "XY.";
+const char JRN_2[] PROGMEM = "TP.";
+
+const char* const JoyRoutineNames[] PROGMEM = {
+  JRN_0, JRN_1, JRN_2, NULL,
+};
+
+const char MRN_0[] PROGMEM = "J-XY.";
+const char MRN_1[] PROGMEM = "M-XY.";
+const char MRN_2[] PROGMEM = "M-DU.";
+
+const char* const MonitorRoutineNames[] PROGMEM = {
+  MRN_0, MRN_1, MRN_2, NULL,
 };
 
 void displayMenuItem(int item, bool current)
 {
+  char strbuf[20];
   switch(item){
-    // case MENU_POWER_SHORT:
-    // display.println("PWR.");
-    // break;
-    // case MENU_RESET:
-    // display.println("RESET.");
-    // break;
     case MENU_DIALMODE:
-    display.print("DIAL: ");
-    display.println(DialRoutineNames[dialroutine_idx]);
+    display.print(F("DIAL  "));
+    strcpy_P(strbuf, (char*)pgm_read_word(&(DialRoutineNames[dialroutine_idx])));
+    display.println(strbuf);
     break;
     case MENU_JOYMODE:
-    display.print("JOY: ");
-    display.println(JoyRoutineNames[joyroutine_idx]);
+    display.print(F("JOY   "));
+    strcpy_P(strbuf, (char*)pgm_read_word(&(JoyRoutineNames[joyroutine_idx])));
+    display.println(strbuf);
     break;
     case MENU_OCTMODE:
-    display.println("OCT Mode");
+    display.println(F("OCT Mode"));
     break;
     case MENU_MEDIAMODE:
-    display.println("MEDIA Mode");
+    display.println(F("MEDIA Mode"));
     break;
     case MENU_KEYMODE:
-    display.println("KEY Mode");
+    display.println(F("KEY Mode"));
     break;
-    // case MENU_POWER_LONG:
-    // display.println("PANIC.");
-    // break;
+    case MENU_MONITORMODE:
+    display.print(F("MON   "));
+    strcpy_P(strbuf, (char*)pgm_read_word(&(MonitorRoutineNames[monroutine_idx])));
+    display.println(strbuf);
+    break;
   }
 }
 
@@ -162,6 +185,8 @@ void executeMenuItem(int item)
     case MENU_JOYMODE:
     change_mode(JOY_UPDATE_ROUTINE);
     break;
+    case MENU_MONITORMODE:
+    change_mode(MON_UPDATE_ROUTINE);
     // case MENU_POWER_LONG:
     // longPullSwitch(DMOBO_PWRSW);
     // break;
@@ -177,15 +202,15 @@ int UpdateMenu(int event)
   }
   display.fillRect(0, 16 + 8 * menu_idx, 64, 8, INVERSE);
 
-  if (event & ME_UP){
+  if (event & K1_DOWN){
     menu_idx = (menu_idx + MENU_ITEM_COUNT - 1) % MENU_ITEM_COUNT;
     return 0;
   }
-  if (event & ME_DOWN){
+  if (event & K2_DOWN){
     menu_idx = (menu_idx + 1) % MENU_ITEM_COUNT;
     return 0;
   }
-  if (event & ME_ENTER){
+  if (event & K3_DOWN){
     ui_blink(0, 16 + menu_idx * 8, 64, 8, 3);
     executeMenuItem(menu_idx);
     return 0;
@@ -205,17 +230,17 @@ int MediaMode(int event)
 
   display.fillRect(0, 16, 64, 48, BLACK);
   display.setCursor(0, 16);
-  display.println("MEDIA MODE");
-  display.println("<< ||> >>");
+  display.println(F("MEDIA MODE"));
+  display.println(F("<< ||> >>"));
 
-  if (event & ME_UP){
-    Serial.println("MEDIA_PREV");
+  if (event & K1_DOWN){
+    Serial.println(F("MEDIA_PREV"));
   }
-  if (event & ME_DOWN){
-    Serial.println("MEDIA_PLAY");
+  if (event & K2_DOWN){
+    Serial.println(F("MEDIA_PLAY"));
   }
-  if (event & ME_ENTER){
-    Serial.println("MEDIA_NEXT");
+  if (event & K3_DOWN){
+    Serial.println(F("MEDIA_NEXT"));
   }
   return -1;
 }
@@ -232,17 +257,53 @@ int BrowseKeyMode(int event)
 
   display.fillRect(0, 16, 64, 48, BLACK);
   display.setCursor(0, 16);
-  display.println("KEY MODE");
+  display.println(F("KEY MODE"));
 
-  if (event & ME_UP){
-    Serial.println("KEY_UP");
+  if (event & K1_DOWN){
+    LONGPRESS_DOWN(lp_k1);
   }
-  if (event & ME_DOWN){
-    Serial.println("KEY_DOWN");
+  if (event & K2_DOWN){
+    LONGPRESS_DOWN(lp_k2);
   }
-  if (event & ME_ENTER){
-    Serial.println("KEY_ENTER");
+  if (event & K3_DOWN){
+    LONGPRESS_DOWN(lp_k3);
   }
+
+  if (event & K1_UP){
+    LONGPRESS_UP(lp_k1);
+  }
+  if (event & K2_UP){
+
+    LONGPRESS_UP(lp_k2);
+  }
+  if (event & K3_UP){
+    LONGPRESS_UP(lp_k3);
+  }
+
+  LONGPRESS_STATUS k1 = LONGPRESS_CHECK(lp_k1);
+  LONGPRESS_STATUS k2 = LONGPRESS_CHECK(lp_k2);
+  LONGPRESS_STATUS k3 = LONGPRESS_CHECK(lp_k3);
+
+  if(k1 == LP_SHORT){
+    Serial.println(F("KEY_K1"));
+  }
+  if (k2 == LP_SHORT){
+    Serial.println(F("KEY_K2"));
+  }
+  if (k3 == LP_SHORT){
+    Serial.println(F("KEY_K3"));
+  }
+
+  if(k1 == LP_LONG){
+    Serial.println(F("KEY_K4"));
+  }
+  if (k2 == LP_LONG){
+    Serial.println(F("KEY_K5"));
+  }
+  if (k3 == LP_LONG){
+    Serial.println(F("KEY_K6"));
+  }
+
   return -1;
 }
 
@@ -257,39 +318,54 @@ int OctaveMode(int event)
     return 0;
   }
 
-  display.fillRect(0, 16, 64, 48, BLACK);
+  display.fillRect(0, 16, 64, 63, BLACK);
   display.setCursor(0, 16);
-  display.println("OCT MODE");
-  display.println("-  |  +");
+  display.println(F("OCT MODE"));
+  display.println(F("-  |  +"));
 
-  if (event & ME_UP){
-    Serial.println("OCD");
+  if (event & K1_DOWN){
+    Serial.println(F("OCD"));
   }
-  if (event & ME_DOWN){
-    Serial.println("OCU");
+  if (event & K2_DOWN){
+    Serial.println(F("OCU"));
   }
-  if (event & ME_ENTER){
-    Serial.println("OCR");
+  if (event & K3_DOWN){
+    Serial.println(F("OCR"));
   }
   return -1;
 }
 
+#define EL_INDICATOR_X1 18
+#define EL_INDICATOR_Y1 6
+#define EL_INDICATOR_X2 62
+#define EL_INDICATOR_Y2 10
+
 int UpdateStatusIndicators(int event)
 {
+  //TODO update event handling
   (void)event;
-  return -1;
+
+  display.fillRect(0, 0, 128, 15, BLACK);
+  display.setCursor(0, 6);
+  display.print(F("EL:"));
+  int x = map(el_duty, EL_DUTY_MIN, EL_DUTY_MAX, EL_INDICATOR_X1 + 4 , EL_INDICATOR_X2 - 4);
+  int y = (EL_INDICATOR_Y1 + EL_INDICATOR_Y2) / 2;
+  display.drawRect(EL_INDICATOR_X1, EL_INDICATOR_Y1, EL_INDICATOR_X2 - EL_INDICATOR_X1 + 1, EL_INDICATOR_Y2 - EL_INDICATOR_Y1 + 1, WHITE);
+  display.drawLine(EL_INDICATOR_X1 + 2, y, x, y, WHITE);
+
+  return 0;
 }
 
 int DialVolume(int event)
 {
   if (event & DE_UP){
-    Serial.println("VLD");
+    Serial.println(F("VLD"));
   }
   if (event & DE_DOWN){
-    Serial.println("VLU");
+    Serial.println(F("VLU"));
   }
   if (event & DE_PUSH){
-    Serial.println("VLM");
+    Serial.println(F("VLM"));
   }
   // if (event & DE_RELEASE){
   // }
@@ -305,10 +381,18 @@ int DialMouseWheel(int event)
     MouseMove(0, 1, 1);
   }
   if (event & DE_PUSH){
-    Serial.println("DMP");
+    LONGPRESS_DOWN(lp_dial);
   }
   if (event & DE_RELEASE){
-    Serial.println("DMR");
+    LONGPRESS_UP(lp_dial);
+  }
+
+  LONGPRESS_STATUS dial = LONGPRESS_CHECK(lp_dial);
+  if(dial == LP_SHORT){
+    Serial.println(F("DMP"));
+  }
+  if (dial == LP_LONG){
+    Serial.println(F("DML"));
   }
   return -1;
 }
@@ -316,16 +400,16 @@ int DialMouseWheel(int event)
 int DialTransport(int event)
 {
   if (event & DE_UP){
-    Serial.println("DTU");
+    Serial.println(F("DTU"));
   }
   if (event & DE_DOWN){
-    Serial.println("DTD");
+    Serial.println(F("DTD"));
   }
   if (event & DE_PUSH){
-    Serial.println("DTP");
+    Serial.println(F("DTP"));
   }
   if (event & DE_RELEASE){
-    Serial.println("DTR");
+    Serial.println(F("DTR"));
   }
   return -1;
 }
@@ -333,16 +417,16 @@ int DialTransport(int event)
 int DialController(int event)
 {
   if (event & DE_UP){
-    Serial.println("DCU");
+    Serial.println(F("DCU"));
   }
   if (event & DE_DOWN){
-    Serial.println("DCD");
+    Serial.println(F("DCD"));
   }
   if (event & DE_PUSH){
-    Serial.println("DCP");
+    Serial.println(F("DCP"));
   }
   if (event & DE_RELEASE){
-    Serial.println("DCR");
+    Serial.println(F("DCR"));
   }
   return -1;
 }
@@ -364,16 +448,16 @@ int JoyMouse(int event)
 int JoyXY(int event)
 {
   if (event & JE_POS){
-    Serial.print("XY,");
+    Serial.print(F("XY,"));
     Serial.print(joy_x);
-    Serial.print(",");
+    Serial.print(F(","));
     Serial.println(joy_y);
   }
   if (event & JE_PUSH){
-    Serial.println("XY_PUSH");
+    Serial.println(F("XY_PUSH"));
   }
   if (event & JE_RELEASE){
-    Serial.println("XY_RELEASE");
+    Serial.println(F("XY_RELEASE"));
   }
   return -1;
 }
@@ -392,11 +476,60 @@ int JoyTransport(int event)
   return -1;
 }
 
+#define MON_X1 66
+#define MON_Y1 16
+#define MON_X2 127
+#define MON_Y2 63
+
+#define MON_CENTER_X 96
+#define MON_CENTER_Y 39
+
+void Monitor_cls()
+{
+  display.fillRect(MON_X1, MON_Y1, MON_X2 - MON_X1 + 1, MON_Y2 - MON_Y1 + 1, BLACK);
+  for(int x = MON_X1; x <= MON_X2; x += 10)
+  {
+    display.drawPixel(x, MON_CENTER_Y, WHITE);
+  }
+  for(int y = MON_Y1 + 3; y <= MON_Y2; y += 10)
+  {
+    display.drawPixel(MON_CENTER_X, y, WHITE);
+  }
+}
+
+int MonitorJoyXY(int event)
+{
+  Monitor_cls();
+  int x = map(joy_x, -512, 512, MON_X1, MON_X2);
+  int y = map(joy_y, -512, 512, MON_Y1, MON_Y2);
+
+  // display.drawFastHLine(MON_X1, y, MON_X2, y);
+  // display.drawFastVLine(x, MON_Y1, x, MON_Y2);
+  if(!joy_sw.current_val) {
+    display.fillCircle(x, y, 5, WHITE);
+  }else{
+    display.drawCircle(x, y, 5, WHITE);
+  }
+
+  return 0;
+}
+
+int MonitorMidiDual(int event)
+{
+
+}
+
+int MonitorMidiXY(int event)
+{
+
+}
+
 ROUTINE routines[UPDATE_ROUTINE_COUNT] = {
   UpdateMenu,
-  UpdateStatusIndicators,
   DialVolume,
   JoyMouse,
+  MonitorJoyXY,
+  UpdateStatusIndicators,
 };
 int routine_events[UPDATE_ROUTINE_COUNT];
 
@@ -420,6 +553,13 @@ ROUTINE JoyRoutines[] = {
   JoyMouse,
   JoyXY,
   JoyTransport,
+  NULL,
+};
+
+ROUTINE MonRoutines[] = {
+  MonitorJoyXY,
+  MonitorMidiXY,
+  MonitorMidiDual,
   NULL,
 };
 
@@ -453,9 +593,11 @@ void setup()   {
   // DIALMUX offline
   pinMode(DCNT_DIALMUX, INPUT_PULLUP);
 
-  // digitalWrite(DMOBO_PWRSW, HIGH);
-  // digitalWrite(DMOBO_RSTSW, HIGH);
-  // digitalWrite(DCNT_DIALMUX, HIGH);
+  //
+  pinMode(PWM_EL, OUTPUT);
+  TCCR1A = _BV(COM1B1) | _BV(WGM10);
+  TCCR1B = _BV(WGM13) /* | _BV(WGM12) */ | _BV(CS11);
+  OCR1A = 789;
 
   memset(routine_events, 0, sizeof(routine_events));
 
@@ -469,36 +611,28 @@ void setup()   {
   display.drawLine(64, 15, 64, 63, 1);
 
   display.display();
+
+  Serial.println(F("START"));
 }
-
-// byte dial_stat = LOW;
-// int hdd_led;
-// bool hdd_active = false;
-// int hl_base = 800;
-
-// DialMux offline
-// void toggleDial()
-// {
-//   dial_stat = !dial_stat;
-//   digitalWrite(DCNT_DIALMUX, dial_stat);
-//   delay(200);
-// }
-
 
 void read()
 {
-  if (DEBOUNCE_READ(DCNT_LB, lb) && lb.current_val == LOW)
+  if (DEBOUNCE_READ(DCNT_LB, lb))
   {
-    post_event(MENU_UPDATE_ROUTINE, ME_UP);
+    if(lb.current_val == LOW) post_event(MENU_UPDATE_ROUTINE, K1_DOWN);
+    else post_event(MENU_UPDATE_ROUTINE, K1_UP);
   }
-  if (DEBOUNCE_READ(DCNT_MB, mb) && mb.current_val == LOW)
+  if (DEBOUNCE_READ(DCNT_MB, mb))
   {
-    post_event(MENU_UPDATE_ROUTINE, ME_DOWN);
+    if(mb.current_val == LOW) post_event(MENU_UPDATE_ROUTINE, K2_DOWN);
+    else post_event(MENU_UPDATE_ROUTINE, K2_UP);
   }
-  if (DEBOUNCE_READ(DCNT_RB, rb) && rb.current_val == LOW)
+  if (DEBOUNCE_READ(DCNT_RB, rb))
   {
-    post_event(MENU_UPDATE_ROUTINE, ME_ENTER);
+    if(rb.current_val == LOW) post_event(MENU_UPDATE_ROUTINE, K3_DOWN);
+    else post_event(MENU_UPDATE_ROUTINE, K3_UP);
   }
+
   if (DEBOUNCE_READ(DCNT_DIALSW, dial_sw))
   {
     if(dial_sw.current_val == LOW) {
@@ -549,73 +683,59 @@ void read()
   joy_x = jx;
   joy_y = jy;
 
-  // if(DEBOUNCE_READ(DMOBO_PWRLED, pwr_led)){
-  //   post_event(STATUS_UPDATE_ROUTINE, 0);
-  // }
-  // HDD_LED offline
-  // int hl_val = (analogRead(AMOBO_HDDLED));
-  // hl_base = hl_base * 0.995 + hl_val * 0.005;
-  // int cur_hdd_led = hl_val  - hl_base;
-  // hdd_led = max(max(cur_hdd_led, hdd_led - 1), 0);
-  // bool ha = (hdd_led > 10);
-  // if(ha != hdd_active){
-  //   hdd_active = ha;
-  //   post_event(STATUS_UPDATE_ROUTINE, 0);
-  // }
-  char* comlink = ReadCOM();
-  if(comlink != NULL){
-    //TODO MOSI commands
-  }
+  comlink = ReadCOM();
 
+  if(comlink != NULL){
+
+    // =============== EL_DUTY CMD 0x01 ===============
+    if(comlink[0] == 0x01)
+    {
+      int value = map((int)comlink[2], 0, 127, EL_DUTY_MIN, EL_DUTY_MAX);
+      switch(comlink[1])
+      {
+        case 102:
+        el_duty = value;
+        break;
+      }
+    }
+    // =============== GET_SETTINGS CMD 0x02 ===============
+    else if (comlink[0] == 0x02)
+    {
+      char settings[64];
+      static const char psettings[] PROGMEM = "SETTING,%d,%d,%d,%d";
+      sprintf_P(settings, psettings, menu_mode, dialroutine_idx, joyroutine_idx, monroutine_idx);
+
+      Serial.println(settings);
+    }
+    // =============== SET_SETTINGS CMD 0x0e ===============
+    else if (comlink[0] == 0x03)
+    {
+      menu_mode = comlink[1];
+      dialroutine_idx = comlink[2];
+      joyroutine_idx = comlink[3];
+      monroutine_idx = comlink[4];
+
+      post_event(MENU_UPDATE_ROUTINE, 0);
+    }
+  }
 }
 
 void run()
 {
   for(int i=0;i<UPDATE_ROUTINE_COUNT; ++i){
     if (routine_events[i] >= 0){
-      // Serial.print("run ");
-      // Serial.println(i);
       routine_events[i] = routines[i](routine_events[i]);
     }
   }
+
+  if(el_duty < EL_DUTY_MIN) { el_duty = EL_DUTY_MIN;}
+  if(el_duty > EL_DUTY_MAX) { el_duty = EL_DUTY_MAX; }
+  OCR1B = el_duty;
+
 }
 
 void loop() {
   read();
   run();
-  // display.print("pwr_led=");
-  // display.print(pwr_led);
-  // display.print("dial_stat=");
-  // display.println(dial_stat);
-  // display.print("hdd_led=");
-  // display.println(hdd_led);
-
-  // display.print("lb=");
-  // display.print(lb);
-  // display.print(" mb=");
-  // display.print(mb);
-  // display.print(" rb=");
-  // display.println(rb);
-
-  // display.print(" js=");
-  // display.print(joy_sw);
-  // display.print(" jx=");
-  // display.print(joy_x);
-  // display.print(" jy=");
-  // display.println(joy_y);
-
-  // display.print("ds=");
-  // display.print(dial_sw);
-  // display.print("de1=");
-  // display.print(dial_enc1);
-  // display.print(" de2=");
-  // display.println(dial_enc2);
-
-
   display.display();
-
-  // if(lb == LOW){
-  //   //   shortPullSwitch(DMOBO_PWRSW);
-  //   toggleDial();
-  // }
 }

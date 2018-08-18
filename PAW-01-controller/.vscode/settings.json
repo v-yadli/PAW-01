@@ -1,0 +1,7 @@
+{
+    "arduino.skipHeaderProvider": false,
+    "files.associations": {
+        "functional": "cpp",
+        "type_traits": "cpp"
+    }
+}

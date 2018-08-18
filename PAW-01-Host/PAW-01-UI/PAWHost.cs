@@ -28,46 +28,73 @@ namespace YadliTechnology.PAW01
         static int octave = 0;
         private static readonly char[] s_split = new char[] { ',' };
 
+        public static event Action ControllerConnected = delegate{ };
+
         public static void Start()
         {
-            Console.WriteLine("PAW-01 Signal Converter Host, v0.1");
+            Log.WriteLine("PAW-01 Signal Converter Host, v0.1");
             stopped = false;
 
-            Console.WriteLine("Opening controller port...");
+            Log.WriteLine("Opening controller port...");
             controllerPort = new SerialPort("COM127", 250000);
             controllerPort.ReadTimeout = 1000;
             controllerPort.Open();
-            Console.WriteLine("Opening keyboard port...");
+            Log.WriteLine("Opening keyboard port...");
             keyboardPort = new SerialPort("COM255", 250000);
             keyboardPort.ReadTimeout = 1000;
             keyboardPort.Open();
-            Console.WriteLine("Opening Midi output port...");
+            Log.WriteLine("Opening Midi output port...");
             midiout = new OutputDevice(1);
-            Console.WriteLine("Opening Midi input port...");
+            Log.WriteLine("Opening Midi input port...");
             midiin = new InputDevice(1);
             midiin.ChannelMessageReceived += (o, e) => MidiInHandler(e.Message);
             midiin.StartRecording();
-            Console.WriteLine("Opening input simulator...");
+            Log.WriteLine("Opening input simulator...");
             simulator = new InputSimulator();
 
-            Console.WriteLine("Initializing mouse...");
+            Log.WriteLine("Initializing mouse...");
             mouseProc = new Thread(MouseProc);
             mouseProc.Start(null);
 
-            Console.WriteLine("Initializing keyboard...");
+            Log.WriteLine("Initializing keyboard...");
             keyboardProc = new Thread(KeyboardProc);
             keyboardProc.Start(keyboardPort);
 
-            Console.WriteLine("Initializing controller...");
+            Log.WriteLine("Initializing controller...");
             controllerProc = new Thread(ControllerProc);
             controllerProc.Start(controllerPort);
 
-            Console.WriteLine("PAW-01 Host started. Press anykey to pause...");
+            Log.WriteLine("PAW-01 Host started.");
+        }
+
+        internal static void SetSettings(int menu_mode, int dial_mode, int joy_mode, int mon_mode)
+        {
+            lock(controllerPort)
+            {
+                byte[] buffer = new byte[]{ 0x03, (byte)menu_mode, (byte)dial_mode, (byte)joy_mode, (byte)mon_mode, (byte)'\n' };
+                controllerPort.Write(buffer, 0, buffer.Length);
+            }
+        }
+
+        internal static void GetSettings(out int menu_mode, out int dial_mode, out int joy_mode, out int mon_mode)
+        {
+            lock(controllerPort)
+            {
+                byte[] buffer = new byte[]{ 0x02, (byte)'\n' };
+                controllerPort.Write(buffer, 0, buffer.Length);
+                var s = controllerPort.ReadLine();
+                var cols = s.Split(',');
+                if (cols[0] != "SETTING") throw new InvalidOperationException("PAW-01 controller Wrong response");
+                menu_mode = int.Parse(cols[1]);
+                dial_mode = int.Parse(cols[2]);
+                joy_mode = int.Parse(cols[3]);
+                mon_mode = int.Parse(cols[4]);
+            }
         }
 
         public static void Stop()
         {
-            Console.WriteLine("PAW-01 Host shutting down...");
+            Log.WriteLine("PAW-01 Host shutting down...");
             stopped = true;
 
             lock (keyboardPort)
@@ -82,41 +109,56 @@ namespace YadliTechnology.PAW01
             mouseProc.Join();
             keyboardProc.Join();
             controllerProc.Join();
-            Console.WriteLine("Processors offline.");
+            Log.WriteLine("Processors offline.");
             keyboardPort.Close();
             controllerPort.Close();
-            Console.WriteLine("Ports offline.");
+            Log.WriteLine("Ports offline.");
         }
 
         private static void MidiInHandler(ChannelMessage msg)
         {
+            if(!stopped && msg.Command == ChannelCommand.Controller)
+            {
+                lock (controllerPort)
+                {
+                    try
+                    {
+                        byte[] val = new byte[] { 0x01, (byte)msg.Data1, (byte)msg.Data2, (byte)'\n'};
+                        Log.WriteLine($"CC Out {msg.Data1}, {msg.Data2}");
+                        controllerPort.Write(val, 0, 4);
+                    }
+                    catch { }
+                }
+            }
+            /*
             lock (keyboardPort)
             {
                 if (stopped) return;
                 try
                 {
-                    byte[] val = new byte[] { 0x01, 0x00, (byte)(msg.Data2 * 2), (byte)'\n' };
+                    byte[] val = new byte[] { 0x01, 0x00, (byte)(msg.Data2 * 2),0x00, 0x00, (byte)'\n' };
                     switch (msg.Command)
                     {
                         case ChannelCommand.Controller:
                             if (msg.Data1 == 102)
                             {
-                                System.Console.WriteLine(msg.Data2 * 2);
-                                keyboardPort.Write(val, 0, 4);
-                                //keyboardPort.Write(val, 0, 4);
+                                Log.WriteLine(msg.Data2 * 2);
+                                keyboardPort.Write(val, 0, 6);
+                                keyboardPort.Write(val, 0, 6);
                             }
                             else if (msg.Data1 == 103)
                             {
-                                System.Console.WriteLine(msg.Data2 * 2);
+                                Log.WriteLine(msg.Data2 * 2);
                                 val[1] = 0x01;
-                                keyboardPort.Write(val, 0, 4);
-                                //keyboardPort.Write(val, 0, 4);
+                                keyboardPort.Write(val, 0, 6);
+                                keyboardPort.Write(val, 0, 6);
                             }
                             break;
                     }
                 }
                 catch { }
             }
+            */
         }
 
         private static void KeyboardProc(object state)
@@ -137,7 +179,7 @@ namespace YadliTechnology.PAW01
                     switch (split[0])
                     {
                         case "INFO":
-                            System.Console.WriteLine(content);
+                            Log.WriteLine(content);
                             break;
                         case "KON":
                             KeyOn(ParseArgs(split));
@@ -189,7 +231,7 @@ namespace YadliTechnology.PAW01
             int cc = CC_TABLE[v[0]];
             int val = v[1];
             ChannelMessage msg = null;
-            // System.Console.WriteLine($"{cc},{val}");
+            // Log.WriteLine($"{cc},{val}");
             if (cc == 107)
             { // aftertouch pin
                 val = 128 - val / 8;
@@ -201,13 +243,13 @@ namespace YadliTechnology.PAW01
                 }
                 AfterTouch_On = true;
                 msg = new ChannelMessage(ChannelCommand.ChannelPressure, 0, val);
+                midiout.Send(msg);
             }
-            else
-            {
-                val = val / 8;
-                msg = new ChannelMessage(ChannelCommand.Controller, 0, cc, val);
-            }
-            midiout.Send(msg);
+            //else
+            //{
+            //    val = val / 8;
+            //    msg = new ChannelMessage(ChannelCommand.Controller, 0, cc, val);
+            //}
         }
 
         private static void KeyOff(int k)
@@ -230,12 +272,16 @@ namespace YadliTechnology.PAW01
                 if (stopped) return;
 
                 string content = "";
-                try { content = serialPort.ReadLine(); } catch { continue; }
+                try { lock (serialPort) { content = serialPort.ReadLine(); } } catch { continue; }
                 var split = content.Split(s_split, StringSplitOptions.RemoveEmptyEntries).Select(_ => _.Trim()).ToArray();
                 switch (split[0])
                 {
+                    case "START":
+                        Log.WriteLine("PAW-01 controller connected.");
+                        ControllerConnected();
+                        break;
                     case "INFO":
-                        System.Console.WriteLine(content);
+                        Log.WriteLine(content);
                         break;
                     case "VLD":
                         VolumeUp();
@@ -273,16 +319,28 @@ namespace YadliTechnology.PAW01
                     case "DMP":
                         simulator.Keyboard.KeyPress(VirtualKeyCode.TAB);
                         break;
+                    case "DML":
+                        simulator.Mouse.RightButtonClick();
+                        break;
                     case "OCR":
                         octave = 0;
                         break;
-                    case "KEY_UP":
+                    case "KEY_K1":
                         simulator.Keyboard.KeyPress(VirtualKeyCode.UP);
                         break;
-                    case "KEY_DOWN":
+                    case "KEY_K2":
                         simulator.Keyboard.KeyPress(VirtualKeyCode.DOWN);
                         break;
-                    case "KEY_ENTER":
+                    case "KEY_K3":
+                        simulator.Keyboard.KeyPress(VirtualKeyCode.RETURN);
+                        break;
+                    case "KEY_K4":
+                        simulator.Keyboard.KeyPress(VirtualKeyCode.TAB);
+                        break;
+                    case "KEY_K5":
+                        simulator.Keyboard.KeyPress(VirtualKeyCode.DOWN);
+                        break;
+                    case "KEY_K6":
                         simulator.Keyboard.KeyPress(VirtualKeyCode.RETURN);
                         break;
                     case "MEDIA_PREV":
@@ -310,7 +368,7 @@ namespace YadliTechnology.PAW01
         // controller table
         private static void XY(int[] v)
         {
-            double x = (v[0] + 512) / 1024.0;
+            double x = (v[0] + 520) / 1024.0;
             double y = (v[1]) / 1024.0;
 
             int ix = (int)(x * 16384);
@@ -324,11 +382,15 @@ namespace YadliTechnology.PAW01
             if (y >= 0.0)
             {
                 int mody = (int)(y * 254);
+                if (mody < 0) mody = 0;
+                if (mody > 127) mody = 127;
                 msgy = new ChannelMessage(ChannelCommand.Controller, 0, 1, mody); //mod
             }
             else
             {
                 int c = (int)(y * -254);
+                if (c < 0) c = 0;
+                if (c > 127) c = 127;
                 msgy = new ChannelMessage(ChannelCommand.Controller, 0, 2, c); //2=breath
                 // msgy = new ChannelMessage(ChannelCommand.Controller, 0, 84, c); //84=porta control
             }
@@ -393,7 +455,7 @@ namespace YadliTechnology.PAW01
         private static void OctaveShift(int offset)
         {
             octave += offset;
-            System.Console.WriteLine($"octave = {octave}");
+            Log.WriteLine($"octave = {octave}");
             //TODO range check
         }
 
@@ -432,6 +494,7 @@ namespace YadliTechnology.PAW01
                     break;
             }
         }
+
         private static void MouseMove(int[] v)
         {
             bool isWheel = v[2] != 0;
