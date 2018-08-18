@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Timers;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -22,25 +25,23 @@ namespace YadliTechnology
     /// </summary>
     public partial class ControlPanel
     {
-        int logcnt_ = 0;
+        ObservableCollection<string> logbuf_;
+        Stopwatch logtimer_ = new Stopwatch();
+        System.Timers.Timer timer;
 
         public ControlPanel()
         {
             InitializeComponent();
+            DataContext = logbuf_ = new ObservableCollection<string>();
         }
 
         internal void LogWritten(string obj)
         {
-            m_logConsole.Text += obj + "\n";
-            ++logcnt_;
-
-            if(logcnt_ >= 1024)
+            logbuf_.Add(obj);
+            if (logbuf_.Count >= 1024)
             {
-                logcnt_ = 0;
-                m_logConsole.Text = "";
+                logbuf_.RemoveAt(0);
             }
-
-            m_logConsole.ScrollToEnd();
         }
 
         protected override void OnClosing(CancelEventArgs e)

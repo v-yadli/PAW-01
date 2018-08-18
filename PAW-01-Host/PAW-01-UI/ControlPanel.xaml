@@ -21,7 +21,20 @@
             </StackPanel>
         </GroupBox>
         <GroupBox Header="Status" Grid.Row="1">
-            <TextBox x:Name="m_logConsole" IsManipulationEnabled="False"/>
+            <ItemsControl ItemsSource="{Binding}" >
+                <ItemsControl.Template>
+                    <ControlTemplate>
+                        <ScrollViewer CanContentScroll="True">
+                            <ItemsPresenter/>
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ItemsControl.Template>
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel IsItemsHost="True"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
         </GroupBox>
 
     </Grid>

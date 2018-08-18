@@ -567,7 +567,7 @@ ROUTINE MonRoutines[] = {
 // ============== End of routines
 
 void setup()   {                
-  Serial.begin(250000);
+  Serial.begin(1000000);
   // by default, we'll generate the high voltage from the 3.3v line internally! (neat!)
   display.begin(SSD1306_SWITCHCAPVCC);
   // init done
@@ -695,6 +695,7 @@ void read()
       {
         case 102:
         el_duty = value;
+        Serial.println(F("OK"));
         break;
       }
     }

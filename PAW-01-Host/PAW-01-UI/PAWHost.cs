@@ -27,8 +27,10 @@ namespace YadliTechnology.PAW01
         static volatile bool stopped;
         static int octave = 0;
         private static readonly char[] s_split = new char[] { ',' };
-
         public static event Action ControllerConnected = delegate{ };
+
+        private static volatile int m_controller_WR = 0;
+        private static SemaphoreSlim m_controller_RSP = new SemaphoreSlim(0);
 
         public static void Start()
         {
@@ -36,7 +38,7 @@ namespace YadliTechnology.PAW01
             stopped = false;
 
             Log.WriteLine("Opening controller port...");
-            controllerPort = new SerialPort("COM127", 250000);
+            controllerPort = new SerialPort("COM127", 1000000);
             controllerPort.ReadTimeout = 1000;
             controllerPort.Open();
             Log.WriteLine("Opening keyboard port...");
@@ -67,29 +69,50 @@ namespace YadliTechnology.PAW01
             Log.WriteLine("PAW-01 Host started.");
         }
 
+        private static void RequestControllerAccess(Action action)
+        {
+            Interlocked.Increment(ref m_controller_WR);
+            m_controller_RSP.Wait();
+            Monitor.Enter(controllerPort);
+            try
+            {
+                action();
+            }
+            finally
+            {
+                Monitor.Exit(controllerPort);
+            }
+        }
+
         internal static void SetSettings(int menu_mode, int dial_mode, int joy_mode, int mon_mode)
         {
-            lock(controllerPort)
+            RequestControllerAccess(() =>
             {
                 byte[] buffer = new byte[]{ 0x03, (byte)menu_mode, (byte)dial_mode, (byte)joy_mode, (byte)mon_mode, (byte)'\n' };
                 controllerPort.Write(buffer, 0, buffer.Length);
-            }
+            });
         }
 
         internal static void GetSettings(out int menu_mode, out int dial_mode, out int joy_mode, out int mon_mode)
         {
-            lock(controllerPort)
+            int _p1 = 0, _p2 = 0, _p3 = 0, _p4 = 0;
+            RequestControllerAccess(() =>
             {
                 byte[] buffer = new byte[]{ 0x02, (byte)'\n' };
                 controllerPort.Write(buffer, 0, buffer.Length);
                 var s = controllerPort.ReadLine();
                 var cols = s.Split(',');
                 if (cols[0] != "SETTING") throw new InvalidOperationException("PAW-01 controller Wrong response");
-                menu_mode = int.Parse(cols[1]);
-                dial_mode = int.Parse(cols[2]);
-                joy_mode = int.Parse(cols[3]);
-                mon_mode = int.Parse(cols[4]);
-            }
+                _p1 = int.Parse(cols[1]);
+                _p2 = int.Parse(cols[2]);
+                _p3 = int.Parse(cols[3]);
+                _p4 = int.Parse(cols[4]);
+            });
+
+            menu_mode = _p1;
+            dial_mode = _p2;
+            joy_mode = _p3;
+            mon_mode = _p4;
         }
 
         public static void Stop()
@@ -117,7 +140,7 @@ namespace YadliTechnology.PAW01
 
         private static void MidiInHandler(ChannelMessage msg)
         {
-            if(!stopped && msg.Command == ChannelCommand.Controller)
+            if (!stopped && msg.Command == ChannelCommand.Controller)
             {
                 lock (controllerPort)
                 {
@@ -163,16 +186,12 @@ namespace YadliTechnology.PAW01
 
         private static void KeyboardProc(object state)
         {
-            var serialPort = (SerialPort)state;
             while (true)
             {
                 if (stopped) return;
 
                 string content = "";
-                lock (serialPort)
-                {
-                    try { content = serialPort.ReadLine(); } catch { continue; }
-                }
+                try { content = keyboardPort.ReadLine(); } catch { continue; }
                 try
                 {
                     var split = content.Split(s_split, StringSplitOptions.RemoveEmptyEntries).Select(_ => _.Trim()).ToArray();
@@ -272,7 +291,14 @@ namespace YadliTechnology.PAW01
                 if (stopped) return;
 
                 string content = "";
-                try { lock (serialPort) { content = serialPort.ReadLine(); } } catch { continue; }
+
+                if (m_controller_WR != 0)
+                {
+                    Interlocked.Decrement(ref m_controller_WR);
+                    m_controller_RSP.Release();
+                }
+
+                try { content = serialPort.ReadLine(); } catch { continue; }
                 var split = content.Split(s_split, StringSplitOptions.RemoveEmptyEntries).Select(_ => _.Trim()).ToArray();
                 switch (split[0])
                 {
