@@ -37,11 +37,14 @@ namespace YadliTechnology
 
         internal void LogWritten(string obj)
         {
-            logbuf_.Add(obj);
-            if (logbuf_.Count >= 1024)
+            Dispatcher.Invoke(() =>
             {
-                logbuf_.RemoveAt(0);
-            }
+                logbuf_.Add(obj);
+                if (logbuf_.Count >= 1024)
+                {
+                    logbuf_.RemoveAt(0);
+                }
+            });
         }
 
         protected override void OnClosing(CancelEventArgs e)

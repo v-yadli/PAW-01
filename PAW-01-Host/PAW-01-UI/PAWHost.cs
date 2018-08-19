@@ -8,6 +8,7 @@ using WindowsInput;
 using WindowsInput.Native;
 using Sanford.Multimedia;
 using Sanford.Multimedia.Midi;
+using System.Diagnostics;
 
 namespace YadliTechnology.PAW01
 {
@@ -65,6 +66,10 @@ namespace YadliTechnology.PAW01
             Log.WriteLine("Initializing controller...");
             controllerProc = new Thread(ControllerProc);
             controllerProc.Start(controllerPort);
+
+            Log.WriteLine("Initializing stats monitor...");
+            statsProc = new Thread(StatsProc);
+            statsProc.Start();
 
             Log.WriteLine("PAW-01 Host started.");
         }
@@ -218,6 +223,36 @@ namespace YadliTechnology.PAW01
             }
         }
 
+        private static void StatsProc()
+        {
+            var pc_cpu = new PerformanceCounter("Processor", "% Processor Time", "_Total");
+            var pc_io  = new PerformanceCounter("PhysicalDisk", "% Disk Time", "_Total");
+            var pc_ram = new PerformanceCounter("Memory", "% Committed Bytes In Use", null);
+
+            while (!stopped)
+            {
+                try
+                {
+                    Thread.Sleep(3000);
+                    var cpu = pc_cpu.NextValue();
+                    var io = pc_io.NextValue();
+                    var ram = pc_ram.NextValue();
+
+                    RequestControllerAccess(() =>
+                    {
+                        byte[] buf = new byte[]{0x04, (byte)cpu, (byte)ram, (byte)io, (byte)'\n'};
+                        controllerPort.Write(buf, 0, buf.Length);
+                    });
+
+                }
+                catch (Exception ex)
+                {
+                    Log.WriteLine(ex.ToString());
+                }
+            }
+        }
+
+
         // http://tonalsoft.com/pub/pitch-bend/pitch.2005-08-31.17-00.aspx
         // The General MIDI specification assigns the number 69 to A440
         // That is, Key 69 = AM37 Key 16, at OCT=0
@@ -243,6 +278,7 @@ namespace YadliTechnology.PAW01
         private static Thread controllerProc;
         private static Thread keyboardProc;
         private static Thread mouseProc;
+        private static Thread statsProc;
 
         private static void CC(int[] v)
         {
@@ -296,6 +332,7 @@ namespace YadliTechnology.PAW01
                 {
                     Interlocked.Decrement(ref m_controller_WR);
                     m_controller_RSP.Release();
+                    lock (controllerPort) { /* sync with requester */ }
                 }
 
                 try { content = serialPort.ReadLine(); } catch { continue; }
@@ -469,7 +506,14 @@ namespace YadliTechnology.PAW01
                 _dx = dx;
                 _dy = dy;
 
-                simulator.Mouse.MoveMouseBy((int)(dx * len * Math.Sign(mx)), (int)(dy * len * Math.Sign(my)));
+                try
+                {
+                    simulator.Mouse.MoveMouseBy((int)(dx * len * Math.Sign(mx)), (int)(dy * len * Math.Sign(my)));
+                }
+                catch (Exception ex)
+                {
+                    Log.WriteLine(ex.ToString());
+                }
             }
         }
 
@@ -487,37 +531,67 @@ namespace YadliTechnology.PAW01
 
         private static void MediaPrev()
         {
-            simulator.Keyboard.KeyPress(VirtualKeyCode.MEDIA_PREV_TRACK);
+            try
+            {
+                simulator.Keyboard.KeyPress(VirtualKeyCode.MEDIA_PREV_TRACK);
+            }
+            catch (Exception ex)
+            {
+                Log.WriteLine(ex.ToString());
+            }
         }
 
         private static void MediaPlay()
         {
-            simulator.Keyboard.KeyPress(VirtualKeyCode.MEDIA_PLAY_PAUSE);
+            try
+            {
+                simulator.Keyboard.KeyPress(VirtualKeyCode.MEDIA_PLAY_PAUSE);
+            }
+            catch (Exception ex)
+            {
+                Log.WriteLine(ex.ToString());
+            }
         }
 
         private static void MediaNext()
         {
-            simulator.Keyboard.KeyPress(VirtualKeyCode.MEDIA_NEXT_TRACK);
+            try
+            {
+                simulator.Keyboard.KeyPress(VirtualKeyCode.MEDIA_NEXT_TRACK);
+            }
+            catch (Exception ex)
+            {
+                Log.WriteLine(ex.ToString());
+            }
         }
 
         private static void MousePress(int[] v, bool isPress)
         {
             MouseButton mb = (MouseButton)v[0];
             // MouseEvent e = MouseEvent.MOUSEEVENTF_LEFTDOWN;
-            switch (mb)
+
+            try
             {
-                case MouseButton.LEFT:
-                    if (isPress) simulator.Mouse.LeftButtonDown();
-                    else simulator.Mouse.LeftButtonUp();
-                    break;
-                case MouseButton.MIDDLE:
-                    if (isPress) simulator.Mouse.XButtonDown(2);
-                    else simulator.Mouse.XButtonUp(2);
-                    break;
-                case MouseButton.RIGHT:
-                    if (isPress) simulator.Mouse.RightButtonDown();
-                    else simulator.Mouse.RightButtonUp();
-                    break;
+
+                switch (mb)
+                {
+                    case MouseButton.LEFT:
+                        if (isPress) simulator.Mouse.LeftButtonDown();
+                        else simulator.Mouse.LeftButtonUp();
+                        break;
+                    case MouseButton.MIDDLE:
+                        if (isPress) simulator.Mouse.XButtonDown(2);
+                        else simulator.Mouse.XButtonUp(2);
+                        break;
+                    case MouseButton.RIGHT:
+                        if (isPress) simulator.Mouse.RightButtonDown();
+                        else simulator.Mouse.RightButtonUp();
+                        break;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.WriteLine(ex.ToString());
             }
         }
 
@@ -534,23 +608,51 @@ namespace YadliTechnology.PAW01
             }
             else
             {
-                simulator.Mouse.VerticalScroll(y);
+                try
+                {
+                    simulator.Mouse.VerticalScroll(y);
+                }
+                catch (Exception ex)
+                {
+                    Log.WriteLine(ex.ToString());
+                }
             }
         }
 
         private static void VolumeUp()
         {
-            simulator.Keyboard.KeyPress(VirtualKeyCode.VOLUME_UP);
+            try
+            {
+                simulator.Keyboard.KeyPress(VirtualKeyCode.VOLUME_UP);
+            }
+            catch (Exception ex)
+            {
+                Log.WriteLine(ex.ToString());
+            }
         }
 
         private static void VolumeDown()
         {
-            simulator.Keyboard.KeyPress(VirtualKeyCode.VOLUME_DOWN);
+            try
+            {
+                simulator.Keyboard.KeyPress(VirtualKeyCode.VOLUME_DOWN);
+            }
+            catch (Exception ex)
+            {
+                Log.WriteLine(ex.ToString());
+            }
         }
 
         private static void VolumeMute()
         {
-            simulator.Keyboard.KeyPress(VirtualKeyCode.VOLUME_MUTE);
+            try
+            {
+                simulator.Keyboard.KeyPress(VirtualKeyCode.VOLUME_MUTE);
+            }
+            catch (Exception ex)
+            {
+                Log.WriteLine(ex.ToString());
+            }
         }
     }
 }

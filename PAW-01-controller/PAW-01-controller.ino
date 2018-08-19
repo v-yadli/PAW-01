@@ -2,6 +2,7 @@
 #include "debounced_button.h"
 #include "utils.h"
 #include "com.h"
+#include "icons.h"
 #define joy_deadzone 8
 #define joy_xzero 520
 #define joy_yzero 526
@@ -32,6 +33,9 @@ int dialroutine_idx = 0;
 int joyroutine_idx = 0;
 int monroutine_idx = 0;
 int el_duty = 0;
+int cpu_stat = 0;
+int ram_stat = 0;
+int io_stat = 0;
 char* comlink = nullptr;
 
 LONGPRESS_RECORD lp_k1 = {0, 0};
@@ -97,10 +101,10 @@ enum MENU_ITEM {
   // MENU_RESET,
   MENU_DIALMODE,
   MENU_JOYMODE,
+  MENU_MONITORMODE,
   MENU_OCTMODE,
   MENU_MEDIAMODE,
   MENU_KEYMODE,
-  MENU_MONITORMODE,
   // MENU_POWER_LONG,
   MENU_ITEM_COUNT,
 };
@@ -145,13 +149,13 @@ void displayMenuItem(int item, bool current)
     display.println(strbuf);
     break;
     case MENU_OCTMODE:
-    display.println(F("OCT Mode"));
+    display.println(F("OCT   Mode"));
     break;
     case MENU_MEDIAMODE:
     display.println(F("MEDIA Mode"));
     break;
     case MENU_KEYMODE:
-    display.println(F("KEY Mode"));
+    display.println(F("KEY   Mode"));
     break;
     case MENU_MONITORMODE:
     display.print(F("MON   "));
@@ -335,10 +339,20 @@ int OctaveMode(int event)
   return -1;
 }
 
-#define EL_INDICATOR_X1 18
-#define EL_INDICATOR_Y1 6
-#define EL_INDICATOR_X2 62
-#define EL_INDICATOR_Y2 10
+#define INDICATOR_Y1 6
+#define INDICATOR_Y2 10
+
+#define EL_INDICATOR_X1 17
+#define EL_INDICATOR_X2 31
+
+#define CPU_INDICATOR_X1 (EL_INDICATOR_X1 + 32)
+#define CPU_INDICATOR_X2 (EL_INDICATOR_X2 + 32)
+
+#define RAM_INDICATOR_X1 (EL_INDICATOR_X1 + 64)
+#define RAM_INDICATOR_X2 (EL_INDICATOR_X2 + 64)
+
+#define IO_INDICATOR_X1 (EL_INDICATOR_X1 + 96)
+#define IO_INDICATOR_X2 (EL_INDICATOR_X2 + 96)
 
 int UpdateStatusIndicators(int event)
 {
@@ -346,12 +360,37 @@ int UpdateStatusIndicators(int event)
   (void)event;
 
   display.fillRect(0, 0, 128, 15, BLACK);
-  display.setCursor(0, 6);
-  display.print(F("EL:"));
-  int x = map(el_duty, EL_DUTY_MIN, EL_DUTY_MAX, EL_INDICATOR_X1 + 4 , EL_INDICATOR_X2 - 4);
-  int y = (EL_INDICATOR_Y1 + EL_INDICATOR_Y2) / 2;
-  display.drawRect(EL_INDICATOR_X1, EL_INDICATOR_Y1, EL_INDICATOR_X2 - EL_INDICATOR_X1 + 1, EL_INDICATOR_Y2 - EL_INDICATOR_Y1 + 1, WHITE);
+  // display.setCursor(0, 6);
+  // display.print(F("EL:"));
+  unsigned char icon_buf[32];
+
+  memcpy_P(icon_buf, ICON_EL, 32);
+  display.drawBitmap(0, 0, icon_buf, 16, 15, WHITE);
+  memcpy_P(icon_buf, ICON_CPU, 32);
+  display.drawBitmap(32, 0, icon_buf, 16, 15, WHITE);
+  memcpy_P(icon_buf, ICON_RAM, 32);
+  display.drawBitmap(64, 0, icon_buf, 16, 15, WHITE);
+  memcpy_P(icon_buf, ICON_IO, 32);
+  display.drawBitmap(96, 0, icon_buf, 16, 15, WHITE);
+
+  int x,y;
+  y = (INDICATOR_Y1 + INDICATOR_Y2) / 2;
+
+  x = map(el_duty, EL_DUTY_MIN, EL_DUTY_MAX, EL_INDICATOR_X1 + 2 , EL_INDICATOR_X2 - 2);
+  display.drawRect(EL_INDICATOR_X1, INDICATOR_Y1, EL_INDICATOR_X2 - EL_INDICATOR_X1 + 1, INDICATOR_Y2 - INDICATOR_Y1 + 1, WHITE);
   display.drawLine(EL_INDICATOR_X1 + 2, y, x, y, WHITE);
+
+  x = map(cpu_stat, 0, 100, CPU_INDICATOR_X1 + 2 , CPU_INDICATOR_X2 - 2);
+  display.drawRect(CPU_INDICATOR_X1, INDICATOR_Y1, CPU_INDICATOR_X2 - CPU_INDICATOR_X1 + 1, INDICATOR_Y2 - INDICATOR_Y1 + 1, WHITE);
+  display.drawLine(CPU_INDICATOR_X1 + 2, y, x, y, WHITE);
+
+  x = map(ram_stat, 0, 100, RAM_INDICATOR_X1 + 2 , RAM_INDICATOR_X2 - 2);
+  display.drawRect(RAM_INDICATOR_X1, INDICATOR_Y1, RAM_INDICATOR_X2 - RAM_INDICATOR_X1 + 1, INDICATOR_Y2 - INDICATOR_Y1 + 1, WHITE);
+  display.drawLine(RAM_INDICATOR_X1 + 2, y, x, y, WHITE);
+
+  x = map(io_stat, 0, 100, IO_INDICATOR_X1 + 2 , IO_INDICATOR_X2 - 2);
+  display.drawRect(IO_INDICATOR_X1, INDICATOR_Y1, IO_INDICATOR_X2 - IO_INDICATOR_X1 + 1, INDICATOR_Y2 - INDICATOR_Y1 + 1, WHITE);
+  display.drawLine(IO_INDICATOR_X1 + 2, y, x, y, WHITE);
 
   return 0;
 }
@@ -708,7 +747,7 @@ void read()
 
       Serial.println(settings);
     }
-    // =============== SET_SETTINGS CMD 0x0e ===============
+    // =============== SET_SETTINGS CMD 0x03 ===============
     else if (comlink[0] == 0x03)
     {
       menu_mode = comlink[1];
@@ -717,6 +756,15 @@ void read()
       monroutine_idx = comlink[4];
 
       post_event(MENU_UPDATE_ROUTINE, 0);
+    }
+    // =============== STATS CMD 0x04 ===============
+    else if (comlink[0] == 0x04)
+    {
+      cpu_stat = comlink[1];
+      ram_stat = comlink[2];
+      io_stat = comlink[3];
+
+      post_event(STATUS_UPDATE_ROUTINE, 0);
     }
   }
 }
