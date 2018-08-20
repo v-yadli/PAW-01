@@ -26,8 +26,6 @@ namespace YadliTechnology
     public partial class ControlPanel
     {
         ObservableCollection<string> logbuf_;
-        Stopwatch logtimer_ = new Stopwatch();
-        System.Timers.Timer timer;
 
         public ControlPanel()
         {
@@ -66,6 +64,11 @@ namespace YadliTechnology
         private void Exit(object sender, RoutedEventArgs e)
         {
             Application.Current.Shutdown();
+        }
+
+        private void SetAftertouchThreshold(object sender, RoutedEventArgs e)
+        {
+            PAWHost.AfterTouch_Threshold = (int)(e.Source as Slider)?.Value;
         }
     }
 }

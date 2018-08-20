@@ -4,15 +4,7 @@
 #include "com.h"
 
 #define GROUP_CNT 5
-#define CV_OUT_CNT 2
-#define CV_IN_CNT 4
-#define CVMUX_IN_CNT 16
-#define CVMUX_IN_GROUP 4
-#define CVMUX_IN_GROUP_CNT 4
-
-#define DAC0832ADDR0 13
-#define DAC0832ADDR1 14
-#define DAC0832ADDRXFER 15
+#define CV_IN_CNT 1
 
 struct KEY{
   unsigned long TriggerTime;
@@ -22,9 +14,7 @@ struct KEY{
 DEBOUNCED_BUTTON KEYS_1[37];
 DEBOUNCED_BUTTON KEYS_2[37];
 KEY KEYS_RECORDS[37];
-byte CV_OUT[CV_OUT_CNT];
 int CV_IN[CV_IN_CNT];
-int CVMUX_IN[CVMUX_IN_CNT];
 
 void DATA_IN()
 {
@@ -97,16 +87,8 @@ void setup()   {
     KEYS_RECORDS[i].TriggerTime=0;
   }
 
-  for(int i=0;i<CV_OUT_CNT;++i){
-    CV_OUT[i] = 128;
-  }
-
   for(int i=0;i<CV_IN_CNT;++i){
     CV_IN[i] = 512;
-  }
-
-  for(int i=0;i<CVMUX_IN_CNT;++i){
-    CVMUX_IN[i] = 512;
   }
 }
 
@@ -167,6 +149,12 @@ void ReadKeys()
       continue;
     }
     if(!KEYS_RECORDS[i].On){
+      // when primary switch is OFF, we should reset Trigger time.
+      // this prevents "ghost timers" producing very weak velocities
+      // note, ghost timer is due to the fact that TriggerTime is only
+      // recorded on an edge trigger when TriggerTime == 0.
+      if (KEYS_1[i].current_val) KEYS_RECORDS[i].TriggerTime = 0;
+
       if (!KEYS_1[i].current_val && KEYS_RECORDS[i].TriggerTime == 0){
         KEYS_RECORDS[i].TriggerTime = millis();
       }
@@ -193,118 +181,19 @@ void ReadKeys()
 
 void ReadCVIn()
 {
-  DATA_IN();
-
-  int cv0= analogRead(CVIN0);
-  int cv1= analogRead(CVIN1);
-  int cv2= analogRead(CVIN2);
-  int cv3= analogRead(CVIN3);
+  int cv0 = analogRead(CVIN_AFTERTOUCH);
+  cv0 = map(cv0, 0, 1024, 127, 0);
 
   if(cv0 != CV_IN[0]){
-    Serial.print("CC,0,");
+    Serial.print("CC,107,");
     Serial.println(cv0);
-  }
-  if(cv1 != CV_IN[1]){
-    Serial.print("CC,1,");
-    Serial.println(cv1);
-  }
-  if(cv2 != CV_IN[2]){
-    Serial.print("CC,2,");
-    Serial.println(cv2);
-  }
-  if(cv3 != CV_IN[3]){
-    Serial.print("CC,3,");
-    Serial.println(cv3);
   }
 
   CV_IN[0] = cv0;
-  CV_IN[1] = cv1;
-  CV_IN[2] = cv2;
-  CV_IN[3] = cv3;
-}
-
-void WriteCVOut()
-{
-  DATA_OUT();
-  SET_ADDR(DAC0832ADDR0);
-  delayMicroseconds(50);
-  DATA_WRITE(CV_OUT[0]);
-  delayMicroseconds(50);
-  SET_ADDR(DAC0832ADDR1);
-  delayMicroseconds(50);
-  DATA_WRITE(CV_OUT[1]);
-  delayMicroseconds(50);
-  SET_ADDR(DAC0832ADDRXFER);
-  delayMicroseconds(50);
-}
-
-void ReadCVMuxIn()
-{
-  DATA_IN();
-  byte grp;
-  byte offset = 0;
-  for(grp = 0; grp < CVMUX_IN_GROUP_CNT; ++grp)
-  {
-    SET_ADDR(grp);
-    CVMUX_IN[offset++] = analogRead(CVMUXIN0);
-    CVMUX_IN[offset++] = analogRead(CVMUXIN1);
-    // CVMUX_IN[offset++] = analogRead(CVMUXIN2);
-    // CVMUX_IN[offset++] = analogRead(CVMUXIN3);
-  }
-}
-
-int val[80];
-int oldval[80];
-
-void testkeys()
-{
-  byte grp;
-  byte offset = 0;
-  for(grp = 0; grp < GROUP_CNT; ++grp)
-  {
-    SET_ADDR(grp);
-    //val[offset++] = digitalRead(DATA0);
-    val[offset++] = (analogRead(7) > 950);
-    val[offset++] = digitalRead(DATA1);
-    val[offset++] = digitalRead(DATA2);
-    val[offset++] = digitalRead(DATA3);
-    val[offset++] = digitalRead(DATA4);
-    val[offset++] = digitalRead(DATA5);
-    val[offset++] = digitalRead(DATA6);
-    val[offset++] = digitalRead(DATA7);
-  }
-  if(memcmp(val, oldval, sizeof(val))){
-    for(int i=0;i<80;++i){
-      Serial.print(val[i]);
-      Serial.print(' ');
-    }
-    Serial.println();
-    delay(1);
-  }
-  memcpy(oldval, val, sizeof(val));
 }
 
 void loop() {
-  // testkeys();
   //  read 37 keys
   ReadKeys();
   ReadCVIn();
-  WriteCVOut();
-  //ReadCVMuxIn();
-
-  char* comlink = ReadCOM();
-  if(comlink != NULL){
-    if(comlink[0] == 0x01){
-      //two bytes after this flag. "CVOUT_ID,VALUE"
-      //CVOUT_ID is 0-1
-      //the value should be 0-255.
-      byte cvout_id = comlink[1];
-      byte val = comlink[2];
-      Serial.print("INFO,CVOUT-");
-      Serial.print(cvout_id);
-      Serial.print(" SET TO ");
-      Serial.println(val);
-      CV_OUT[cvout_id] = val;
-    }
-  }
 }

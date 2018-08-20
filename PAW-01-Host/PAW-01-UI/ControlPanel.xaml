@@ -10,14 +10,20 @@
 
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="60" />
+            <RowDefinition Height="85" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <GroupBox Header="Configuration" Grid.Row="0">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Click="LoadSettings" Content="Load Settings" />
-                <Button Click="SaveSettings" Content="Save Settings" />
-                <Button Click="Exit" Content="Exit" />
+            <StackPanel Orientation="Vertical" VerticalAlignment="Stretch">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Label Content="AfterTouch    " />
+                    <Slider Orientation="Horizontal" Minimum="0" Maximum="127" ValueChanged="SetAftertouchThreshold"  Width="128"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Click="LoadSettings" Content="Load Settings" />
+                    <Button Click="SaveSettings" Content="Save Settings" />
+                    <Button Click="Exit" Content="Exit" />
+                </StackPanel>
             </StackPanel>
         </GroupBox>
         <GroupBox Header="Status" Grid.Row="1">

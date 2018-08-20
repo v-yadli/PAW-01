@@ -56,21 +56,22 @@ namespace YadliTechnology
         {
             var s = PAWSetting.Default;
             s.Reload();
-            PAW01.PAWHost.SetSettings(s.menu_mode, s.dial_mode, s.joy_mode, s.mon_mode);
+            PAW01.PAWHost.SetSettings(s.menu_mode, s.dial_mode, s.joy_mode, s.mon_mode, s.aftertouch_threshold);
             Log.WriteLine("Settings set to the controller.");
         }
 
         public static void GetSettings()
         {
             var s = PAWSetting.Default;
-            int menu_mode, dial_mode, joy_mode, mon_mode;
+            int menu_mode, dial_mode, joy_mode, mon_mode, aftertouch_threshold;
             try
             {
-                PAW01.PAWHost.GetSettings(out menu_mode, out dial_mode, out joy_mode, out mon_mode);
+                PAW01.PAWHost.GetSettings(out menu_mode, out dial_mode, out joy_mode, out mon_mode, out aftertouch_threshold);
                 s.menu_mode = menu_mode;
                 s.dial_mode = dial_mode;
                 s.joy_mode = joy_mode;
                 s.mon_mode = mon_mode;
+                s.aftertouch_threshold = aftertouch_threshold;
                 s.Save();
                 Log.WriteLine("Settings loaded from the controller.");
             }

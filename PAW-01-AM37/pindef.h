@@ -20,13 +20,13 @@
 
 #define DEXT 13
 
-#define CVIN0 0
-#define CVIN1 1
-#define CVIN2 2
-#define CVIN3 3
+// #define CVIN0 0
+// #define CVIN1 1
+// #define CVIN2 2
+#define CVIN_AFTERTOUCH 3
 
-#define CVMUXIN0 4
-#define CVMUXIN1 5
+// #define CVMUXIN0 4
+// #define CVMUXIN1 5
 // #define CVMUXIN2 6
 // #define CVMUXIN3 7
 // unfortunately we've lost 1x4 cvmux due to a design error

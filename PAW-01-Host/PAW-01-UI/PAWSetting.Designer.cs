@@ -70,5 +70,17 @@ namespace YadliTechnology {
                 this["mon_mode"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("32")]
+        public int aftertouch_threshold {
+            get {
+                return ((int)(this["aftertouch_threshold"]));
+            }
+            set {
+                this["aftertouch_threshold"] = value;
+            }
+        }
     }
 }

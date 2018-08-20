@@ -14,5 +14,8 @@
     <Setting Name="mon_mode" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">0</Value>
     </Setting>
+    <Setting Name="aftertouch_threshold" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">32</Value>
+    </Setting>
   </Settings>
 </SettingsFile>
